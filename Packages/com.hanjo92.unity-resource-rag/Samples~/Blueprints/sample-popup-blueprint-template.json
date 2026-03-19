@@ -1,0 +1,115 @@
+{
+  "screenName": "RewardPopup",
+  "stack": "ugui",
+  "root": {
+    "id": "root_canvas",
+    "name": "RewardPopupCanvas",
+    "kind": "canvas",
+    "canvasScaler": {
+      "uiScaleMode": "ScaleWithScreenSize",
+      "referenceResolution": { "x": 1920, "y": 1080 },
+      "screenMatchMode": "MatchWidthOrHeight",
+      "matchWidthOrHeight": 0.5
+    },
+    "children": [
+      {
+        "id": "safe_area_root",
+        "name": "SafeAreaRoot",
+        "kind": "container",
+        "components": [
+          {
+            "typeName": "MyGame.UI.SafeAreaFitter",
+            "properties": {
+              "applyOnAwake": true
+            }
+          }
+        ],
+        "rect": {
+          "anchorMin": { "x": 0, "y": 0 },
+          "anchorMax": { "x": 1, "y": 1 },
+          "offsetMin": { "x": 0, "y": 0 },
+          "offsetMax": { "x": 0, "y": 0 }
+        },
+        "children": [
+          {
+            "id": "popup_frame",
+            "name": "PopupFrame",
+            "kind": "image",
+            "assetQuery": {
+              "queryText": "blue rounded popup frame with gold trim reward modal window",
+              "regionType": "popup_frame",
+              "preferredKind": "sprite",
+              "bindingPolicy": "require_confident",
+              "minScore": 0.55
+            },
+            "image": {
+              "type": "Sliced",
+              "raycastTarget": false
+            },
+            "rect": {
+              "anchorMin": { "x": 0.5, "y": 0.5 },
+              "anchorMax": { "x": 0.5, "y": 0.5 },
+              "pivot": { "x": 0.5, "y": 0.5 },
+              "anchoredPosition": { "x": 0, "y": 0 },
+              "sizeDelta": { "x": 960, "y": 560 }
+            },
+            "children": [
+              {
+                "id": "content_column",
+                "name": "ContentColumn",
+                "kind": "container",
+                "layoutGroup": {
+                  "kind": "Vertical",
+                  "padding": { "left": 48, "right": 48, "top": 48, "bottom": 48 },
+                  "childAlignment": "UpperCenter",
+                  "spacing": 24,
+                  "childControlWidth": true,
+                  "childControlHeight": false,
+                  "childForceExpandWidth": true,
+                  "childForceExpandHeight": false
+                },
+                "rect": {
+                  "anchorMin": { "x": 0, "y": 0 },
+                  "anchorMax": { "x": 1, "y": 1 },
+                  "offsetMin": { "x": 0, "y": 0 },
+                  "offsetMax": { "x": 0, "y": 0 }
+                },
+                "children": [
+                  {
+                    "id": "title_text",
+                    "name": "TitleText",
+                    "kind": "tmp_text",
+                    "text": {
+                      "value": "Reward Unlocked",
+                      "fontAssetQuery": {
+                        "queryText": "fantasy ui title font serif gold heading",
+                        "preferredKind": "tmp_font",
+                        "bindingPolicy": "require_confident",
+                        "minScore": 0.45
+                      },
+                      "fontSize": 42,
+                      "alignment": "Center",
+                      "enableAutoSizing": false,
+                      "raycastTarget": false,
+                      "color": "#FFF4D2FF"
+                    },
+                    "layoutElement": {
+                      "preferredHeight": 60,
+                      "flexibleWidth": 1
+                    },
+                    "rect": {
+                      "anchorMin": { "x": 0.5, "y": 1.0 },
+                      "anchorMax": { "x": 0.5, "y": 1.0 },
+                      "pivot": { "x": 0.5, "y": 1.0 },
+                      "sizeDelta": { "x": 720, "y": 60 }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

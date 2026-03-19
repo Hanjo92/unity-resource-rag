@@ -1,0 +1,28 @@
+{
+  "name": "com.hanjo92.unity-resource-rag",
+  "version": "0.1.0",
+  "displayName": "Unity Resource RAG",
+  "description": "Asset-aware UI retrieval and blueprint execution tools for Unity projects. Exports project UI resources into a normalized catalog and applies real-asset UI blueprints through MCP-friendly custom tools.",
+  "unity": "2021.3",
+  "documentationUrl": "https://github.com/Hanjo92/unity-resource-rag#readme",
+  "licensesUrl": "https://github.com/Hanjo92/unity-resource-rag/blob/main/LICENSE",
+  "keywords": [
+    "unity",
+    "ui",
+    "rag",
+    "mcp",
+    "asset-retrieval",
+    "blueprint"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hanjo92/unity-resource-rag.git"
+  },
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.0.2"
+  },
+  "author": {
+    "name": "Hanjo92",
+    "url": "https://github.com/Hanjo92"
+  }
+}

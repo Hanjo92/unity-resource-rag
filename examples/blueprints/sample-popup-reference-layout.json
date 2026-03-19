@@ -1,0 +1,90 @@
+{
+  "screenName": "RewardPopup",
+  "referenceResolution": {
+    "x": 1920,
+    "y": 1080
+  },
+  "safeAreaRoot": {
+    "name": "SafeAreaRoot",
+    "components": [
+      {
+        "typeName": "MyGame.UI.SafeAreaFitter",
+        "properties": {
+          "applyOnAwake": true
+        }
+      }
+    ]
+  },
+  "regions": [
+    {
+      "id": "popup_frame",
+      "name": "PopupFrame",
+      "kind": "image",
+      "parentId": "safe_area_root",
+      "regionType": "popup_frame",
+      "queryText": "blue rounded popup frame with gold trim reward modal window",
+      "preferredKind": "sprite",
+      "bindingPolicy": "require_confident",
+      "minScore": 0.55,
+      "normalizedBounds": {
+        "x": 0.25,
+        "y": 0.2407,
+        "w": 0.5,
+        "h": 0.5185
+      },
+      "image": {
+        "type": "Sliced",
+        "raycastTarget": false
+      }
+    },
+    {
+      "id": "content_column",
+      "name": "ContentColumn",
+      "kind": "container",
+      "parentId": "popup_frame",
+      "stretchToParent": true,
+      "layoutGroup": {
+        "kind": "Vertical",
+        "padding": {
+          "left": 48,
+          "right": 48,
+          "top": 48,
+          "bottom": 48
+        },
+        "childAlignment": "UpperCenter",
+        "spacing": 24,
+        "childControlWidth": true,
+        "childControlHeight": false,
+        "childForceExpandWidth": true,
+        "childForceExpandHeight": false
+      }
+    },
+    {
+      "id": "title_text",
+      "name": "TitleText",
+      "kind": "tmp_text",
+      "parentId": "content_column",
+      "normalizedBounds": {
+        "x": 0.125,
+        "y": 0.0857,
+        "w": 0.75,
+        "h": 0.1071
+      },
+      "text": {
+        "value": "Reward Unlocked",
+        "fontQueryText": "fantasy ui title font serif gold heading",
+        "fontPreferredKind": "tmp_font",
+        "fontMinScore": 0.45,
+        "fontSize": 42,
+        "alignment": "Center",
+        "enableAutoSizing": false,
+        "raycastTarget": false,
+        "color": "#FFF4D2FF"
+      },
+      "layoutElement": {
+        "preferredHeight": 60,
+        "flexibleWidth": 1
+      }
+    }
+  ]
+}

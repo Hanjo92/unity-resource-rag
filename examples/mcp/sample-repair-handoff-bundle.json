@@ -1,0 +1,66 @@
+{
+  "kind": "unity_ui_repair_handoff_bundle",
+  "screenName": "RewardPopup",
+  "summary": {
+    "hasMeaningfulMismatch": true,
+    "issueCount": 3,
+    "topSeverity": "high"
+  },
+  "focusNodes": [
+    {
+      "id": "popup_frame",
+      "name": "PopupFrame",
+      "kind": "image",
+      "hierarchyPath": "RewardPopupCanvas/SafeAreaRoot/PopupFrame",
+      "overlapScore": 0.78,
+      "assetPath": "Assets/UI/Popup/DialogFrame.png"
+    }
+  ],
+  "strategyOrder": [
+    "Inspect the exact wrong region and its parent chain.",
+    "Fix parent/container ownership and top-level anchors first.",
+    "Then check CanvasScaler, size rules, and layout ownership.",
+    "Only after structure is stable, review asset choice or local spacing.",
+    "Re-verify with a screenshot before broadening scope."
+  ],
+  "repairPrompt": "Repair the current Unity UI so it matches the reference image more closely for screen 'RewardPopup'.",
+  "requests": {
+    "reverify": {
+      "tool": "manage_camera",
+      "parameters": {
+        "action": "screenshot",
+        "capture_source": "scene_view",
+        "view_target": "RewardPopupCanvas",
+        "include_image": true,
+        "max_resolution": 768
+      }
+    }
+  },
+  "artifacts": {
+    "referenceImage": "/absolute/path/to/reference.png",
+    "capturedImage": "/absolute/path/to/captured.png"
+  },
+  "issues": [
+    {
+      "type": "composition_shift",
+      "severity": "high",
+      "title": "Top-level composition is shifted from the reference",
+      "details": "Foreground center delta is (-0.08, 0.03) with bbox IoU 0.51.",
+      "likelyFixes": [
+        "Inspect parent container ownership before touching child offsets.",
+        "Check anchors and pivot for the suspect region.",
+        "Verify centered popup roots are still centered under the intended parent."
+      ],
+      "suspectNodes": [
+        {
+          "id": "popup_frame",
+          "name": "PopupFrame",
+          "kind": "image",
+          "hierarchyPath": "RewardPopupCanvas/SafeAreaRoot/PopupFrame",
+          "overlapScore": 0.78,
+          "assetPath": "Assets/UI/Popup/DialogFrame.png"
+        }
+      ]
+    }
+  ]
+}

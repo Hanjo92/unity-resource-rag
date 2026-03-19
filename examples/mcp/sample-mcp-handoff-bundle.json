@@ -1,0 +1,76 @@
+{
+  "kind": "unity_mcp_handoff_bundle",
+  "screenName": "RewardPopup",
+  "resolvedBlueprint": "/absolute/path/to/03-resolved-blueprint.json",
+  "preflight": [
+    {
+      "type": "resource_check",
+      "resource": "custom_tools",
+      "mustContain": "apply_ui_blueprint",
+      "reason": "Ensure the Unity project discovered the package custom tool before execution."
+    }
+  ],
+  "contracts": {
+    "customToolName": "apply_ui_blueprint",
+    "customToolResource": "custom_tools"
+  },
+  "requests": {
+    "validate": {
+      "tool": "execute_custom_tool",
+      "customToolName": "apply_ui_blueprint",
+      "parameters": {
+        "action": "validate",
+        "blueprintPath": "/absolute/path/to/03-resolved-blueprint.json"
+      }
+    },
+    "apply": {
+      "tool": "execute_custom_tool",
+      "customToolName": "apply_ui_blueprint",
+      "parameters": {
+        "action": "apply",
+        "blueprintPath": "/absolute/path/to/03-resolved-blueprint.json"
+      }
+    },
+    "verify": {
+      "tool": "manage_camera",
+      "parameters": {
+        "action": "screenshot",
+        "capture_source": "scene_view",
+        "view_target": "RewardPopupCanvas",
+        "include_image": true,
+        "max_resolution": 768
+      }
+    }
+  },
+  "directToolFallback": {
+    "validate": {
+      "tool": "apply_ui_blueprint",
+      "parameters": {
+        "action": "validate",
+        "blueprintPath": "/absolute/path/to/03-resolved-blueprint.json"
+      }
+    },
+    "apply": {
+      "tool": "apply_ui_blueprint",
+      "parameters": {
+        "action": "apply",
+        "blueprintPath": "/absolute/path/to/03-resolved-blueprint.json"
+      }
+    }
+  },
+  "artifacts": {
+    "resolvedBlueprint": "/absolute/path/to/03-resolved-blueprint.json",
+    "bindingReport": "/absolute/path/to/03-binding-report.json"
+  },
+  "bindingSummary": {
+    "hasErrors": false,
+    "bindingCount": 2,
+    "issueCount": 0
+  },
+  "notes": [
+    "Run validate before apply.",
+    "If your MCP client exposes Unity custom tools directly, use directToolFallback.",
+    "If custom tools are routed through execute_custom_tool, use requests.validate/apply.",
+    "After apply succeeds, run requests.verify to capture a scene view screenshot."
+  ]
+}

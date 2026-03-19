@@ -1,0 +1,4 @@
+numpy>=1.26
+Pillow>=10.0
+pydantic>=2.7
+openai>=1.30
