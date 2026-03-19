@@ -1,5 +1,9 @@
 # Unity Resource RAG
 
+[![Release](https://img.shields.io/github/v/release/Hanjo92/unity-resource-rag?label=release)](https://github.com/Hanjo92/unity-resource-rag/releases)
+[![License](https://img.shields.io/github/license/Hanjo92/unity-resource-rag)](./LICENSE)
+[![Unity](https://img.shields.io/badge/Unity-2021.3%2B-black?logo=unity)](./Packages/com.hanjo92.unity-resource-rag/package.json)
+
 `unity-resource-rag`는 레퍼런스 이미지나 목업을 보고, Unity 프로젝트 안의 실제 `Sprite`, `Prefab`, `TMP Font Asset`, `Material`을 우선 사용해 UI를 조립하기 위한 저장소다.
 
 이 저장소는 두 레이어로 나뉜다.
@@ -28,6 +32,8 @@
 
 - Repository: [Hanjo92/unity-resource-rag](https://github.com/Hanjo92/unity-resource-rag)
 - Issues: [github.com/Hanjo92/unity-resource-rag/issues](https://github.com/Hanjo92/unity-resource-rag/issues)
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- Releases: [github.com/Hanjo92/unity-resource-rag/releases](https://github.com/Hanjo92/unity-resource-rag/releases)
 
 ## Requirements
 
@@ -91,6 +97,7 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
 ## Key Docs
 
 - [docs/asset-aware-ui-rag-architecture.md](./docs/asset-aware-ui-rag-architecture.md)
+- [CHANGELOG.md](./CHANGELOG.md)
 - [specs/mcp-sidecar-contract.md](./specs/mcp-sidecar-contract.md)
 - [specs/ui-assembly-contract.md](./specs/ui-assembly-contract.md)
 - [specs/ui-binding-contract.md](./specs/ui-binding-contract.md)
