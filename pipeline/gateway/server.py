@@ -6,16 +6,16 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from pydantic import ValidationError
-
-from .adapters.gemini_direct import GatewayAdapterError, run_gemini_layout_extraction
 from .auth import GatewayAuthConfig, validate_bearer_token
-from .models import GatewayErrorResponse, GatewayOkResponse, GatewayRunRequest
+from .adapters.gemini_direct import GatewayAdapterError
+from .models import GatewayErrorResponse, GatewayOkResponse
+from .router import GatewayCapabilityRouter, GatewayRouteError, create_default_gateway_router
 
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8080
 DEFAULT_TOKEN_ENV = "UNITY_RESOURCE_RAG_GATEWAY_TOKEN"
+DEFAULT_ROUTER = create_default_gateway_router()
 
 
 def _json_bytes(payload: dict[str, Any]) -> bytes:
@@ -37,17 +37,9 @@ def _error_payload(
     ).model_dump(mode="json")
 
 
-def _select_adapter(request: GatewayRunRequest) -> str:
-    preferences = request.providerPreference or []
-    if any(item in {"gateway:gemini_direct", "gemini_direct"} for item in preferences):
-        return "gemini_direct"
-    if any(item in {"gateway:auto", "auto"} for item in preferences):
-        return "gemini_direct"
-    return "gemini_direct"
-
-
 class GatewayRequestHandler(BaseHTTPRequestHandler):
     server_version = "UnityResourceRagGateway/0.2.1"
+    router: GatewayCapabilityRouter = DEFAULT_ROUTER
 
     def _write_json(self, status_code: int, payload: dict[str, Any]) -> None:
         encoded = _json_bytes(payload)
@@ -105,7 +97,6 @@ class GatewayRequestHandler(BaseHTTPRequestHandler):
 
         try:
             payload = json.loads(body.decode("utf-8"))
-            request = GatewayRunRequest.model_validate(payload)
         except json.JSONDecodeError as exc:
             self._write_json(
                 HTTPStatus.BAD_REQUEST,
@@ -116,29 +107,25 @@ class GatewayRequestHandler(BaseHTTPRequestHandler):
                 ),
             )
             return
-        except ValidationError as exc:
+
+        capability = ""
+        if isinstance(payload, dict):
+            capability = str(payload.get("capability") or "")
+
+        try:
+            result = self.router.handle_payload(payload)
+        except GatewayAdapterError as exc:
             self._write_json(
-                HTTPStatus.BAD_REQUEST,
+                HTTPStatus.BAD_GATEWAY if exc.retryable else HTTPStatus.BAD_REQUEST,
                 _error_payload(
-                    code="invalid_request",
-                    message="Request body did not match GatewayRunRequest.",
-                    retryable=False,
-                    details={"errors": exc.errors()},
+                    code=exc.code,
+                    message=str(exc),
+                    retryable=exc.retryable,
+                    details=exc.details,
                 ),
             )
             return
-
-        adapter_id = _select_adapter(request)
-        try:
-            if adapter_id == "gemini_direct":
-                result = run_gemini_layout_extraction(request)
-            else:
-                raise GatewayAdapterError(
-                    "unsupported_capability",
-                    f"No adapter is available for {adapter_id}.",
-                    retryable=False,
-                )
-        except GatewayAdapterError as exc:
+        except GatewayRouteError as exc:
             self._write_json(
                 HTTPStatus.BAD_GATEWAY if exc.retryable else HTTPStatus.BAD_REQUEST,
                 _error_payload(
@@ -161,7 +148,7 @@ class GatewayRequestHandler(BaseHTTPRequestHandler):
             return
 
         response = GatewayOkResponse(
-            capability=request.capability,
+            capability=capability,
             adapterId=result["adapterId"],
             authMode=result["authMode"],
             providerFamily=result["providerFamily"],
@@ -186,8 +173,8 @@ def main() -> int:
                 "host": host,
                 "port": port,
                 "authTokenEnv": DEFAULT_TOKEN_ENV,
-                "supportedAdapters": ["gemini_direct"],
-                "supportedCapabilities": ["vision_layout_extraction"],
+                "supportedAdapters": list(DEFAULT_ROUTER.supported_adapters),
+                "supportedCapabilities": list(DEFAULT_ROUTER.supported_capabilities),
             },
             ensure_ascii=False,
             separators=(",", ":"),

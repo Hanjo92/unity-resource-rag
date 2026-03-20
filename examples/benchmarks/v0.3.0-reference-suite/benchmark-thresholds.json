@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "0.3.0",
+  "retrievalTop1Min": 0.7,
+  "retrievalTop3Min": 0.9,
+  "normalizedMeanAbsoluteErrorMax": 0.1,
+  "foregroundBboxIoUMin": 0.75,
+  "maxRepairIterations": 1
+}

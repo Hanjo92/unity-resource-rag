@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "0.3.0",
+  "screenName": "reward_popup",
+  "expectedLayout": "Centered reward popup with framed background, title, and single-line reward content.",
+  "expectedMismatchClasses": [
+    "composition_shift",
+    "style_asset_mismatch"
+  ],
+  "maxRepairIterations": 1,
+  "acceptanceNotes": [
+    "Keep the popup centered under the safe area root.",
+    "Prefer a real project prefab or sliced sprite for the frame before layout-only approximations."
+  ]
+}

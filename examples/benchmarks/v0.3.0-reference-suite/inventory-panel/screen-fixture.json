@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "0.3.0",
+  "screenName": "inventory_panel",
+  "expectedLayout": "Inventory panel with reusable slot grid and a stable frame/container relationship.",
+  "expectedMismatchClasses": [
+    "scale_mismatch",
+    "composition_shift",
+    "layout_mismatch"
+  ],
+  "maxRepairIterations": 1,
+  "acceptanceNotes": [
+    "Prefer prefab reuse for repeated slot structures.",
+    "Keep the grid spacing stable across screen sizes."
+  ]
+}

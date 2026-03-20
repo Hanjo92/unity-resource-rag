@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "0.3.0",
+  "screenName": "reward_popup",
+  "regions": [
+    {
+      "regionId": "popup_frame",
+      "regionType": "popup_frame",
+      "queryText": "gold trimmed reward popup frame with rounded corners",
+      "normalizedBounds": {
+        "x": 0.18,
+        "y": 0.16,
+        "w": 0.64,
+        "h": 0.58
+      },
+      "preferredAssetKinds": [
+        "prefab",
+        "sprite"
+      ],
+      "repeatCount": 1,
+      "interactionLevel": "static",
+      "bindingPolicy": "require_confident",
+      "minScore": 0.75
+    },
+    {
+      "regionId": "reward_title",
+      "regionType": "title_text",
+      "queryText": "ornate title text for reward unlocked popup",
+      "normalizedBounds": {
+        "x": 0.28,
+        "y": 0.22,
+        "w": 0.44,
+        "h": 0.12
+      },
+      "preferredAssetKinds": [
+        "tmp_font"
+      ],
+      "repeatCount": 1,
+      "interactionLevel": "static",
+      "bindingPolicy": "review_if_uncertain",
+      "minScore": 0.6
+    }
+  ]
+}

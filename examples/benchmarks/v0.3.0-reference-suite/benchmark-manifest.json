@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "0.3.0",
+  "benchmarkName": "v0.3.0-reference-suite",
+  "projectName": "reward-ui-reference-project",
+  "description": "Two-screen benchmark baseline for v0.3.0 development and regression tracking.",
+  "referenceResolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "screens": [
+    {
+      "screenName": "reward_popup",
+      "displayName": "Reward Popup",
+      "referenceImage": "reward-popup/reference.png",
+      "retrievalFixture": "reward-popup/retrieval-fixture.json",
+      "screenFixture": "reward-popup/screen-fixture.json",
+      "thresholds": "benchmark-thresholds.json"
+    },
+    {
+      "screenName": "inventory_panel",
+      "displayName": "Inventory Panel",
+      "referenceImage": "inventory-panel/reference.png",
+      "retrievalFixture": "inventory-panel/retrieval-fixture.json",
+      "screenFixture": "inventory-panel/screen-fixture.json",
+      "thresholds": "benchmark-thresholds.json"
+    }
+  ]
+}

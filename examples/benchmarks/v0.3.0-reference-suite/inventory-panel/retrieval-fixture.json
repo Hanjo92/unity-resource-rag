@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "0.3.0",
+  "screenName": "inventory_panel",
+  "regions": [
+    {
+      "regionId": "panel_frame",
+      "regionType": "panel_frame",
+      "queryText": "inventory panel frame with tabs and grid background",
+      "normalizedBounds": {
+        "x": 0.1,
+        "y": 0.12,
+        "w": 0.8,
+        "h": 0.72
+      },
+      "preferredAssetKinds": [
+        "prefab",
+        "sprite"
+      ],
+      "repeatCount": 1,
+      "interactionLevel": "interactive",
+      "bindingPolicy": "require_confident",
+      "minScore": 0.72
+    },
+    {
+      "regionId": "slot_grid",
+      "regionType": "repeatable_slot_grid",
+      "queryText": "repeatable item slot grid with consistent spacing",
+      "normalizedBounds": {
+        "x": 0.2,
+        "y": 0.28,
+        "w": 0.6,
+        "h": 0.42
+      },
+      "preferredAssetKinds": [
+        "prefab",
+        "sprite"
+      ],
+      "repeatCount": 12,
+      "interactionLevel": "interactive",
+      "bindingPolicy": "require_confident",
+      "minScore": 0.7
+    }
+  ]
+}
