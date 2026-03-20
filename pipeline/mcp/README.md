@@ -27,7 +27,7 @@ Behavior:
 - `tools/list` returns the four pipeline wrappers and their input schemas.
 - `tools/call` shells out to the existing pipeline scripts and returns JSON text content.
 
-The wrappers reuse the current sidecar scripts instead of duplicating the workflow logic. Extraction-related wrappers also forward the extractor auth options (`provider_api_key_env`, `auth_mode`, `oauth_token_env`, `oauth_token_file`, `oauth_token_command`):
+The wrappers reuse the current sidecar scripts instead of duplicating the workflow logic. Extraction-related wrappers also forward the extractor auth options (`provider_api_key_env`, `auth_mode`, `oauth_token_env`, `oauth_token_file`, `oauth_token_command`, `codex_auth_file`):
 
 - `pipeline/planner/extract_reference_layout.py`
 - `pipeline/workflows/run_reference_to_resolved_blueprint.py`

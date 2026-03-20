@@ -21,6 +21,8 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --hint "mobile reward popup"
 ```
 
+Codex에서 실행 중이고 같은 사용자 계정에 `~/.codex/auth.json`이 있다면 위 명령은 별도의 `OPENAI_API_KEY` 없이도 OpenAI provider 인증을 재사용한다.
+
 Outputs:
 
 - `01-reference-layout.json`
