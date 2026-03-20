@@ -1,10 +1,12 @@
 """Gateway capability registrations."""
 
+from .image_embedding import CAPABILITY_NAME as IMAGE_EMBEDDING_CAPABILITY
 from .text_embedding import CAPABILITY_NAME as TEXT_EMBEDDING_CAPABILITY
 from .vision_layout_extraction import CAPABILITY_NAME as VISION_LAYOUT_EXTRACTION_CAPABILITY
 from .vision_layout_repair_analysis import CAPABILITY_NAME as VISION_LAYOUT_REPAIR_ANALYSIS_CAPABILITY
 
 __all__ = [
+    "IMAGE_EMBEDDING_CAPABILITY",
     "TEXT_EMBEDDING_CAPABILITY",
     "VISION_LAYOUT_EXTRACTION_CAPABILITY",
     "VISION_LAYOUT_REPAIR_ANALYSIS_CAPABILITY",

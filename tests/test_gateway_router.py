@@ -73,6 +73,7 @@ class GatewayRouterTests(unittest.TestCase):
                 "vision_layout_extraction",
                 "vision_layout_repair_analysis",
                 "text_embedding",
+                "image_embedding",
             ),
         )
         self.assertEqual(
@@ -81,5 +82,6 @@ class GatewayRouterTests(unittest.TestCase):
                 "gemini_direct",
                 "verification_pipeline",
                 "local_text_embedding",
+                "local_image_embedding_preview",
             ),
         )

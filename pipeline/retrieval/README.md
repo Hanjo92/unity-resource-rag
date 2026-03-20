@@ -64,6 +64,7 @@ confidence가 충분하면 `auto_bind`, 애매하지만 보류하고 싶으면 `
 현재 벡터 스킴은 `tfidf-sparse-v1`이다.
 
 - 장점: 외부 API 없이 바로 생성 가능하다.
-- 한계: 아직 preview image embedding은 없다.
-- `embedding_bridge.py`는 gateway `text_embedding` 응답을 현재 sparse index 점수로 연결하는 seam 역할을 한다.
+- `embedding_bridge.py`는 gateway sparse embedding 응답을 현재 sparse index 점수로 연결하는 seam 역할을 한다.
+- `image_embedding`은 preview-only local capability로 들어왔고, `visual-token-sparse-v1` 출력은 같은 bridge/scorer 경로로 rerank spike를 해볼 수 있다.
+- production image embedding provider 연동과 asset-side preview index 설계는 아직 `0.3.x` 범위다.
 - 다음 단계: preview/image encoder를 추가해서 visual similarity를 score에 합친다.

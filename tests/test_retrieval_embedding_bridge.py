@@ -11,6 +11,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from pipeline.retrieval.embedding_bridge import (
     EmbeddingBridgeError,
+    normalize_gateway_sparse_embedding_response,
+    score_gateway_embedding_response,
     normalize_gateway_text_embedding_response,
     score_gateway_text_embedding_response,
     score_query_against_index_with_optional_gateway_embedding,
@@ -36,6 +38,30 @@ def _vector_index() -> dict[str, object]:
         },
     ]
     return build_tfidf_index(records)
+
+
+def _image_vector_index() -> dict[str, object]:
+    return {
+        "scheme": "visual-token-sparse-v1",
+        "documents": [
+            {
+                "id": "reward-preview",
+                "vector": {
+                    "orientation_landscape": 0.4,
+                    "palette_warm": 0.35,
+                    "cell_1_1_bright": 0.25,
+                },
+            },
+            {
+                "id": "inventory-preview",
+                "vector": {
+                    "orientation_landscape": 0.3,
+                    "palette_cool": 0.4,
+                    "cell_1_1_dark": 0.3,
+                },
+            },
+        ],
+    }
 
 
 class RetrievalEmbeddingBridgeTests(unittest.TestCase):
@@ -108,6 +134,33 @@ class RetrievalEmbeddingBridgeTests(unittest.TestCase):
         scores = score_gateway_text_embedding_response(response, vector_index)
 
         self.assertGreater(scores["reward-popup-frame"], scores["inventory-panel-frame"])
+
+    def test_generic_embedding_helpers_accept_image_embedding_preview_shape(self) -> None:
+        vector_index = _image_vector_index()
+        response = {
+            "status": "ok",
+            "capability": "image_embedding",
+            "output": {
+                "scheme": "visual-token-sparse-v1",
+                "preview": True,
+                "items": [
+                    {
+                        "index": 0,
+                        "tokenWeights": {
+                            "orientation_landscape": 0.4,
+                            "palette_warm": 0.35,
+                            "cell_1_1_bright": 0.25,
+                        },
+                    }
+                ],
+            },
+        }
+
+        embedding = normalize_gateway_sparse_embedding_response(response)
+        scores = score_gateway_embedding_response(response, vector_index)
+
+        self.assertIn("palette_warm", embedding)
+        self.assertGreater(scores["reward-preview"], scores["inventory-preview"])
 
     def test_optional_gateway_embedding_falls_back_to_baseline(self) -> None:
         vector_index = _vector_index()

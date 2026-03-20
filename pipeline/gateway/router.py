@@ -111,6 +111,7 @@ class GatewayCapabilityRouter:
 def create_default_gateway_router() -> GatewayCapabilityRouter:
     router = GatewayCapabilityRouter()
 
+    from .capabilities.image_embedding import register as register_image_embedding
     from .capabilities.vision_layout_extraction import register as register_vision_layout_extraction
     from .capabilities.vision_layout_repair_analysis import register as register_vision_layout_repair_analysis
     from .capabilities.text_embedding import register as register_text_embedding
@@ -118,4 +119,5 @@ def create_default_gateway_router() -> GatewayCapabilityRouter:
     register_vision_layout_extraction(router)
     register_vision_layout_repair_analysis(router)
     register_text_embedding(router)
+    register_image_embedding(router)
     return router

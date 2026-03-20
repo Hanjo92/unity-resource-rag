@@ -134,7 +134,7 @@ def _extract_embedding_payload(response: Mapping[str, Any]) -> Any:
     raise EmbeddingBridgeError("Could not find an embedding payload in the gateway response.")
 
 
-def normalize_gateway_text_embedding_response(response: Mapping[str, Any]) -> dict[str, float]:
+def normalize_gateway_sparse_embedding_response(response: Mapping[str, Any]) -> dict[str, float]:
     if not isinstance(response, Mapping):
         raise EmbeddingBridgeError("Gateway embedding response must be a mapping.")
 
@@ -173,6 +173,10 @@ def normalize_gateway_text_embedding_response(response: Mapping[str, Any]) -> di
     raise EmbeddingBridgeError("Unsupported embedding payload shape for the current sparse retrieval index.")
 
 
+def normalize_gateway_text_embedding_response(response: Mapping[str, Any]) -> dict[str, float]:
+    return normalize_gateway_sparse_embedding_response(response)
+
+
 def score_embedding_vector_against_index(
     embedding_vector: Mapping[str, Any],
     vector_index: Mapping[str, Any],
@@ -192,12 +196,19 @@ def score_embedding_vector_against_index(
     return scores
 
 
+def score_gateway_embedding_response(
+    response: Mapping[str, Any],
+    vector_index: Mapping[str, Any],
+) -> dict[str, float]:
+    embedding_vector = normalize_gateway_sparse_embedding_response(response)
+    return score_embedding_vector_against_index(embedding_vector, vector_index)
+
+
 def score_gateway_text_embedding_response(
     response: Mapping[str, Any],
     vector_index: Mapping[str, Any],
 ) -> dict[str, float]:
-    embedding_vector = normalize_gateway_text_embedding_response(response)
-    return score_embedding_vector_against_index(embedding_vector, vector_index)
+    return score_gateway_embedding_response(response, vector_index)
 
 
 def score_query_against_index_with_optional_gateway_embedding(

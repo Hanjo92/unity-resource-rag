@@ -8,7 +8,8 @@
 - capability: `vision_layout_extraction`
 - capability: `vision_layout_repair_analysis`
 - capability: `text_embedding`
-- adapters: `gemini_direct`, `verification_pipeline`, `local_text_embedding`
+- capability: `image_embedding` preview
+- adapters: `gemini_direct`, `verification_pipeline`, `local_text_embedding`, `local_image_embedding_preview`
 
 ## Run
 
@@ -110,7 +111,8 @@ python3 pipeline/planner/extract_reference_layout.py \
 - `vision_layout_extraction`은 `ReferenceLayoutPlan` structured output을 Gemini에 직접 요청한다.
 - `vision_layout_repair_analysis`는 기존 verification 분석과 repair patch candidate 생성을 gateway capability로 감싼다.
 - `text_embedding`은 현재 retrieval integration seam용 로컬 `token-frequency-v1` 출력을 제공한다.
-- 향후 `image_embedding` capability를 추가할 수 있다.
+- `image_embedding`은 preview-only local capability이며, ASCII `P2/P3` portable image data URL 또는 caller-supplied `visualTokens`를 `visual-token-sparse-v1`로 변환한다.
+- production provider-backed image embedding rollout은 `0.3.x`로 defer 되어 있다.
 - `auto` 모드에서는 `GEMINI_API_KEY` -> `GEMINI_OAUTH_TOKEN_FILE` -> 로컬에서 감지된 ADC 순서로 인증 경로를 시도한다.
 - ADC 관련 파일이나 `GOOGLE_APPLICATION_CREDENTIALS`가 보이지 않으면 `auto`는 metadata 탐색을 하지 않고 바로 `auth_required`를 반환한다.
 
