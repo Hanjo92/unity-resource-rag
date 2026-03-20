@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "0.3.0",
+  "benchmarkName": "v0.3.0-reference-suite",
+  "projectName": "reward-ui-reference-project",
+  "generatedAtUtc": "2026-03-20T00:00:00Z",
+  "screens": [
+    {
+      "screenName": "reward_popup",
+      "notes": [
+        "Popup frame and title font both clear the confidence bar."
+      ],
+      "regions": [
+        {
+          "regionId": "popup_frame",
+          "top1HitRate": 0.78,
+          "top3HitRate": 0.95,
+          "selectedCandidateScore": 0.82,
+          "bindingDecision": "confident_match",
+          "notes": [
+            "Primary popup frame candidate reused an existing reward shell prefab."
+          ]
+        },
+        {
+          "regionId": "reward_title",
+          "top1HitRate": 0.78,
+          "top3HitRate": 0.95,
+          "selectedCandidateScore": 0.67,
+          "bindingDecision": "confident_match",
+          "notes": [
+            "Title font match stayed above the review threshold."
+          ]
+        }
+      ]
+    },
+    {
+      "screenName": "inventory_panel",
+      "notes": [
+        "Inventory panel reused the panel shell and slot grid assets without fallback."
+      ],
+      "regions": [
+        {
+          "regionId": "panel_frame",
+          "top1HitRate": 0.72,
+          "top3HitRate": 0.93,
+          "selectedCandidateScore": 0.76,
+          "bindingDecision": "confident_match",
+          "notes": [
+            "Panel frame stayed above the prefab-first confidence target."
+          ]
+        },
+        {
+          "regionId": "slot_grid",
+          "top1HitRate": 0.72,
+          "top3HitRate": 0.93,
+          "selectedCandidateScore": 0.74,
+          "bindingDecision": "confident_match",
+          "notes": [
+            "Slot grid reuse remained inside the stable spacing policy."
+          ]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Sample retrieval payload for deterministic baseline scoring.",
+    "Replace with real benchmark output when project captures are available."
+  ]
+}

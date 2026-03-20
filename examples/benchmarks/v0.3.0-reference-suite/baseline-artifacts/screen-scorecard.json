@@ -1,0 +1,108 @@
+{
+  "kind": "screen_benchmark_scorecard",
+  "suiteManifest": "examples/benchmarks/v0.3.0-reference-suite/benchmark-manifest.json",
+  "reportPayload": "examples/benchmarks/v0.3.0-reference-suite/sample-benchmark-report.json",
+  "schemaVersion": "0.3.0",
+  "benchmarkName": "v0.3.0-reference-suite",
+  "projectName": "reward-ui-reference-project",
+  "generatedAtUtc": "2026-03-20T00:00:00Z",
+  "results": [
+    {
+      "screenName": "reward_popup",
+      "retrievalTop1HitRate": 0.83,
+      "retrievalTop3HitRate": 0.96,
+      "normalizedMeanAbsoluteError": 0.08,
+      "foregroundBboxIoU": 0.81,
+      "repairIterations": 1,
+      "hasMeaningfulMismatch": false,
+      "status": "pass",
+      "notes": [
+        "Frame binding and title font selection matched the reference on the first pass."
+      ]
+    },
+    {
+      "screenName": "inventory_panel",
+      "retrievalTop1HitRate": 0.71,
+      "retrievalTop3HitRate": 0.92,
+      "normalizedMeanAbsoluteError": 0.1,
+      "foregroundBboxIoU": 0.76,
+      "repairIterations": 1,
+      "hasMeaningfulMismatch": true,
+      "status": "pass",
+      "notes": [
+        "Slot grid needed one bounded repair pass for spacing alignment."
+      ]
+    }
+  ],
+  "summary": {
+    "screenCount": 2,
+    "passedScreens": 2,
+    "failedScreens": 0,
+    "averageRetrievalTop1HitRate": 0.77,
+    "averageRetrievalTop3HitRate": 0.94,
+    "maxNormalizedMeanAbsoluteError": 0.1,
+    "minForegroundBboxIoU": 0.76
+  },
+  "notes": [
+    "Sample report for schema validation only.",
+    "Use real benchmark captures for production regression tracking."
+  ],
+  "screenChecks": [
+    {
+      "screenName": "reward_popup",
+      "status": "pass",
+      "thresholds": {
+        "retrievalTop1Min": 0.7,
+        "retrievalTop3Min": 0.9,
+        "normalizedMeanAbsoluteErrorMax": 0.1,
+        "foregroundBboxIoUMin": 0.75,
+        "maxRepairIterations": 1
+      },
+      "metrics": {
+        "retrievalTop1HitRate": 0.83,
+        "retrievalTop3HitRate": 0.96,
+        "normalizedMeanAbsoluteError": 0.08,
+        "foregroundBboxIoU": 0.81,
+        "repairIterations": 1,
+        "hasMeaningfulMismatch": false
+      },
+      "expectedMismatchClasses": [
+        "composition_shift",
+        "style_asset_mismatch"
+      ],
+      "observedIssueTypes": [],
+      "notes": [
+        "Frame binding and title font selection matched the reference on the first pass."
+      ]
+    },
+    {
+      "screenName": "inventory_panel",
+      "status": "pass",
+      "thresholds": {
+        "retrievalTop1Min": 0.7,
+        "retrievalTop3Min": 0.9,
+        "normalizedMeanAbsoluteErrorMax": 0.1,
+        "foregroundBboxIoUMin": 0.75,
+        "maxRepairIterations": 1
+      },
+      "metrics": {
+        "retrievalTop1HitRate": 0.71,
+        "retrievalTop3HitRate": 0.92,
+        "normalizedMeanAbsoluteError": 0.1,
+        "foregroundBboxIoU": 0.76,
+        "repairIterations": 1,
+        "hasMeaningfulMismatch": true
+      },
+      "expectedMismatchClasses": [
+        "scale_mismatch",
+        "composition_shift",
+        "layout_mismatch"
+      ],
+      "observedIssueTypes": [],
+      "notes": [
+        "Slot grid needed one bounded repair pass for spacing alignment."
+      ]
+    }
+  ],
+  "hasErrors": false
+}

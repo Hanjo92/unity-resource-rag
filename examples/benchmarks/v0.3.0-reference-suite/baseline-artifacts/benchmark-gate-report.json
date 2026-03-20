@@ -1,0 +1,59 @@
+{
+  "kind": "benchmark_gate_report",
+  "schemaVersion": "0.3.0",
+  "generatedAtUtc": "2026-03-20T00:00:00Z",
+  "benchmarkName": "v0.3.0-reference-suite",
+  "projectName": "reward-ui-reference-project",
+  "suiteManifest": "examples/benchmarks/v0.3.0-reference-suite/benchmark-manifest.json",
+  "inputs": {
+    "retrievalResult": "examples/benchmarks/v0.3.0-reference-suite/sample-retrieval-result.json",
+    "screenReport": "examples/benchmarks/v0.3.0-reference-suite/sample-benchmark-report.json"
+  },
+  "artifacts": {
+    "retrievalScorecard": "retrieval-scorecard.json",
+    "screenScorecard": "screen-scorecard.json",
+    "summaryMarkdown": "benchmark-gate-report.md"
+  },
+  "gateStatus": "pass",
+  "gates": [
+    {
+      "name": "retrieval_benchmark",
+      "status": "pass",
+      "failedScreens": 0
+    },
+    {
+      "name": "screen_benchmark",
+      "status": "pass",
+      "failedScreens": 0
+    },
+    {
+      "name": "must_have_release_gate",
+      "status": "pass",
+      "failedChecks": 0
+    }
+  ],
+  "summary": {
+    "retrieval": {
+      "screenCount": 2,
+      "passedScreens": 2,
+      "failedScreens": 0,
+      "failedRegions": []
+    },
+    "screen": {
+      "screenCount": 2,
+      "passedScreens": 2,
+      "failedScreens": 0,
+      "failedScreensList": []
+    }
+  },
+  "followUps": [
+    {
+      "type": "baseline_fidelity",
+      "message": "Current baseline uses sample benchmark artifacts; rerun with real project captures before release candidate sign-off."
+    },
+    {
+      "type": "rerun_policy",
+      "message": "Rerun this benchmark gate after any retrieval, repair, or gateway contract change that can affect the two benchmark screens."
+    }
+  ]
+}

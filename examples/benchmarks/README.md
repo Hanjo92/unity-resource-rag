@@ -16,6 +16,7 @@ Runner entrypoints:
 
 - `python3 -m pipeline.evaluation.run_retrieval_benchmark <suite-manifest> <result-payload>`
 - `python3 -m pipeline.evaluation.run_screen_benchmark <suite-manifest> <report-payload>`
+- `python3 -m pipeline.evaluation.publish_benchmark_gate_report <suite-manifest> <result-payload> <report-payload> --output-dir <dir>`
 
 Retrieval runners expect a file with `schemaVersion`, `benchmarkName`, `projectName`, `generatedAtUtc`, and a `screens` array. Each screen entry should include `screenName` and a `regions` array with `regionId`, `top1HitRate`, `top3HitRate`, and an optional `selectedCandidateScore`.
 
@@ -29,3 +30,12 @@ Both runners emit deterministic scorecards with:
 - `hasErrors`
 
 The default output filename is derived from the input payload name and ends in `.retrieval-scorecard.json` or `.screen-scorecard.json`.
+
+The gate publisher writes a portable baseline artifact set:
+
+- `retrieval-scorecard.json`
+- `screen-scorecard.json`
+- `benchmark-gate-report.json`
+- `benchmark-gate-report.md`
+
+The checked-in `v0.3.0-reference-suite/baseline-artifacts/` directory is generated from `sample-retrieval-result.json` and `sample-benchmark-report.json` so the team can diff the gate output over time without machine-local absolute paths.

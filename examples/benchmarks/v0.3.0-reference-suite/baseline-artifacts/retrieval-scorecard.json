@@ -1,0 +1,137 @@
+{
+  "kind": "retrieval_benchmark_scorecard",
+  "suiteManifest": "examples/benchmarks/v0.3.0-reference-suite/benchmark-manifest.json",
+  "resultPayload": "examples/benchmarks/v0.3.0-reference-suite/sample-retrieval-result.json",
+  "schemaVersion": "0.3.0",
+  "benchmarkName": "v0.3.0-reference-suite",
+  "projectName": "reward-ui-reference-project",
+  "generatedAtUtc": "2026-03-20T00:00:00Z",
+  "results": [
+    {
+      "screenName": "reward_popup",
+      "retrievalTop1HitRate": 0.78,
+      "retrievalTop3HitRate": 0.95,
+      "normalizedMeanAbsoluteError": 0.0,
+      "foregroundBboxIoU": 1.0,
+      "repairIterations": 0,
+      "hasMeaningfulMismatch": false,
+      "status": "pass",
+      "notes": [
+        "Popup frame and title font both clear the confidence bar."
+      ]
+    },
+    {
+      "screenName": "inventory_panel",
+      "retrievalTop1HitRate": 0.72,
+      "retrievalTop3HitRate": 0.93,
+      "normalizedMeanAbsoluteError": 0.0,
+      "foregroundBboxIoU": 1.0,
+      "repairIterations": 0,
+      "hasMeaningfulMismatch": false,
+      "status": "pass",
+      "notes": [
+        "Inventory panel reused the panel shell and slot grid assets without fallback."
+      ]
+    }
+  ],
+  "summary": {
+    "screenCount": 2,
+    "passedScreens": 2,
+    "failedScreens": 0,
+    "averageRetrievalTop1HitRate": 0.75,
+    "averageRetrievalTop3HitRate": 0.94,
+    "maxNormalizedMeanAbsoluteError": 0.0,
+    "minForegroundBboxIoU": 1.0
+  },
+  "notes": [
+    "Sample retrieval payload for deterministic baseline scoring.",
+    "Replace with real benchmark output when project captures are available."
+  ],
+  "screenChecks": [
+    {
+      "screenName": "reward_popup",
+      "status": "pass",
+      "thresholds": {
+        "retrievalTop1Min": 0.7,
+        "retrievalTop3Min": 0.9
+      },
+      "aggregate": {
+        "retrievalTop1HitRate": 0.78,
+        "retrievalTop3HitRate": 0.95
+      },
+      "regionChecks": [
+        {
+          "regionId": "popup_frame",
+          "regionType": "popup_frame",
+          "status": "pass",
+          "top1HitRate": 0.78,
+          "top3HitRate": 0.95,
+          "candidateScore": 0.82,
+          "minScore": 0.75,
+          "bindingPolicy": "require_confident",
+          "notes": [
+            "Primary popup frame candidate reused an existing reward shell prefab.",
+            "decision=confident_match"
+          ]
+        },
+        {
+          "regionId": "reward_title",
+          "regionType": "title_text",
+          "status": "pass",
+          "top1HitRate": 0.78,
+          "top3HitRate": 0.95,
+          "candidateScore": 0.67,
+          "minScore": 0.6,
+          "bindingPolicy": "review_if_uncertain",
+          "notes": [
+            "Title font match stayed above the review threshold.",
+            "decision=confident_match"
+          ]
+        }
+      ]
+    },
+    {
+      "screenName": "inventory_panel",
+      "status": "pass",
+      "thresholds": {
+        "retrievalTop1Min": 0.7,
+        "retrievalTop3Min": 0.9
+      },
+      "aggregate": {
+        "retrievalTop1HitRate": 0.72,
+        "retrievalTop3HitRate": 0.93
+      },
+      "regionChecks": [
+        {
+          "regionId": "panel_frame",
+          "regionType": "panel_frame",
+          "status": "pass",
+          "top1HitRate": 0.72,
+          "top3HitRate": 0.93,
+          "candidateScore": 0.76,
+          "minScore": 0.72,
+          "bindingPolicy": "require_confident",
+          "notes": [
+            "Panel frame stayed above the prefab-first confidence target.",
+            "decision=confident_match"
+          ]
+        },
+        {
+          "regionId": "slot_grid",
+          "regionType": "repeatable_slot_grid",
+          "status": "pass",
+          "top1HitRate": 0.72,
+          "top3HitRate": 0.93,
+          "candidateScore": 0.74,
+          "minScore": 0.7,
+          "bindingPolicy": "require_confident",
+          "notes": [
+            "Slot grid reuse remained inside the stable spacing policy.",
+            "decision=confident_match"
+          ]
+        }
+      ]
+    }
+  ],
+  "hasErrors": false
+}
