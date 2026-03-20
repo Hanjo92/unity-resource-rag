@@ -27,11 +27,51 @@ python3 pipeline/planner/extract_reference_layout.py \
   --safe-area-properties '{"applyOnAwake": true}'
 ```
 
-provider 메모:
+## 인증 메모
 
-- `auto`: `OPENAI_API_KEY`가 있으면 `openai`, 없으면 `local_heuristic`
+### API key 방식
+
+- `openai` / `openai_compatible` provider에서 사용
+- 실제 구현은 `--provider-api-key-env`로 지정한 env에서 읽는다.
+- 기본 env 이름은 `OPENAI_API_KEY`
+
+예시:
+
+```bash
+python3 pipeline/planner/extract_reference_layout.py \
+  /absolute/path/to/reference.png \
+  --provider openai \
+  --provider-api-key-env OPENAI_API_KEY
+```
+
+### OAuth 방식
+
+- planner 자체는 OAuth access token을 직접 읽지 않는다.
+- `env`, `file`, `command` 중 planner 코드에 구현된 방식은 provider API key용 `env`뿐이다.
+- Codex/MCP client 쪽 OAuth 설정은 [docs/mcp-client-setup.md](../../docs/mcp-client-setup.md)에서 별도로 다룬다.
+
+## provider 메모
+
+- `auto`: `--provider-api-key-env`에 지정한 env가 있으면 `openai`, 없으면 `local_heuristic`
 - `local_heuristic`: 키 없이 동작하는 로컬 fallback
+- `openai`: `OPENAI_API_KEY` 같은 env 기반 인증을 사용하는 기본 API provider
 - `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용
+
+중요:
+
+- `auto`는 OAuth token을 보지 않는다.
+- `auto`는 `openai_compatible`를 자동으로 선택하지 않는다.
+- OpenAI-compatible 서비스는 `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`를 명시해야 한다.
+
+예시:
+
+```bash
+python3 pipeline/planner/extract_reference_layout.py \
+  /absolute/path/to/reference.png \
+  --provider openai_compatible \
+  --provider-base-url https://example.com/v1 \
+  --provider-api-key-env EXAMPLE_API_KEY
+```
 
 키 없이 요청 구조만 확인하려면:
 
@@ -55,3 +95,16 @@ python3 pipeline/retrieval/bind_blueprint_assets.py \
   examples/blueprints/sample-popup-reference-layout.template.json \
   Library/ResourceRag/resource_catalog.jsonl
 ```
+
+## 보안 주의사항
+
+- API key나 OAuth token 값을 report/log/json artifact에 넣지 않는다.
+- `extract-report.json`에는 env 이름이나 provider 종류만 남기고, 실제 secret 값은 남기지 않는 운영을 권장한다.
+- shell history에 토큰 원문이 남지 않도록 직접 CLI 인자로 토큰을 넘기지 말고 env를 사용한다.
+
+## Environment Variables / MCP 검색 키워드
+
+- `OPENAI_API_KEY`
+- `provider-api-key-env`
+- `Environment Variables`
+- `mcpServers`

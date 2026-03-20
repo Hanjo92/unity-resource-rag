@@ -6,7 +6,20 @@
         "-m",
         "pipeline.mcp"
       ],
-      "cwd": "/absolute/path/to/unity-resource-rag"
+      "cwd": "/absolute/path/to/unity-resource-rag",
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    },
+    "unity-resource-rag-http": {
+      "url": "https://mcp.example.com/unity-resource-rag/mcp",
+      "bearer_token_env_var": "UNITY_RESOURCE_RAG_BEARER_TOKEN",
+      "oauth_resource": "https://mcp.example.com",
+      "scopes": [
+        "openid",
+        "profile",
+        "offline_access"
+      ]
     }
   }
 }
