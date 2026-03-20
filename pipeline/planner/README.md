@@ -29,7 +29,8 @@ python3 pipeline/planner/extract_reference_layout.py \
 
 provider 메모:
 
-- `auto`: `OPENAI_API_KEY`가 있으면 `openai`, 없으면 `local_heuristic`
+- `auto`: 기본적으로 `OPENAI_API_KEY`가 있으면 `openai`, 없으면 `local_heuristic`
+- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`)이 있으면 `provider_api_key_env`보다 OAuth 설정이 우선된다
 - `local_heuristic`: 키 없이 동작하는 로컬 fallback
 - `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용
 
@@ -39,6 +40,15 @@ provider 메모:
 python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --dry-run
+```
+
+OAuth 예시:
+
+```bash
+python3 pipeline/planner/extract_reference_layout.py \
+  /absolute/path/to/reference.png \
+  --provider openai \
+  --oauth-token-env OPENAI_OAUTH_TOKEN
 ```
 
 예시:

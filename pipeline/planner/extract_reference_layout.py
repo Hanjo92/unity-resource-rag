@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import re
+import shlex
 import subprocess
 from dataclasses import dataclass
 from io import BytesIO
@@ -240,10 +241,27 @@ def _read_token_from_file(path_value: str) -> str:
     return token
 
 
+def _has_readable_token_file(path_value: str | None) -> bool:
+    if not path_value:
+        return False
+
+    token_file = Path(path_value).expanduser()
+    if not token_file.exists() or not token_file.is_file():
+        return False
+
+    try:
+        return bool(token_file.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
 def _read_token_from_command(command: str) -> str:
+    argv = shlex.split(command)
+    if not argv:
+        _die("OAuth token command is empty.")
+
     completed = subprocess.run(
-        command,
-        shell=True,
+        argv,
         capture_output=True,
         text=True,
         check=False,
@@ -294,9 +312,7 @@ def has_provider_auth(config: ProviderConfig) -> bool:
         assert source_value is not None
         return bool(os.getenv(source_value))
     if token_source == "file":
-        assert source_value is not None
-        token_file = Path(source_value).expanduser()
-        return token_file.exists() and token_file.is_file() and bool(token_file.read_text(encoding="utf-8").strip())
+        return _has_readable_token_file(source_value)
     return bool(source_value)
 
 
@@ -634,7 +650,7 @@ def main() -> int:
     parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed providers. Defaults to api_key unless any OAuth input is provided.")
     parser.add_argument("--oauth-token-env", help="Environment variable that stores an OAuth bearer token.")
     parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
-    parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout.")
+    parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
