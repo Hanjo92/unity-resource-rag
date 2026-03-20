@@ -39,10 +39,10 @@
 
 - Python 3.11+
 - `unity-mcp`가 설치된 Unity 프로젝트
-- 선택 사항: `OPENAI_API_KEY`
+- 선택 사항: `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`
 - 또는 Codex/로컬 OAuth 로그인 상태(`$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`)
 
-> API 키가 없어도 동작은 가능하다. Codex OAuth 로그인 파일이 있으면 OpenAI provider를 그대로 쓸 수 있고, 둘 다 없으면 이미지 레이아웃 추출은 `local_heuristic` fallback을 사용한다.
+> API 키가 없어도 동작은 가능하다. Codex OAuth 로그인 파일이 있으면 OpenAI provider를 그대로 쓸 수 있고, Google 쪽은 `gemini`(API key)와 `antigravity`(OAuth / gcloud access token), Anthropic 쪽은 `claude`(API key)와 `claude_code`(Claude Code bearer token / credential file)로 나눠서 사용할 수 있다. 전부 없으면 이미지 레이아웃 추출은 `local_heuristic` fallback을 사용한다.
 
 ## 설치
 
@@ -101,6 +101,42 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --image /absolute/path/to/reference.png \
   --catalog /absolute/path/to/resource_catalog.jsonl \
   --provider auto
+```
+
+Gemini preset을 바로 쓰려면:
+
+```bash
+python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
+  --image /absolute/path/to/reference.png \
+  --catalog /absolute/path/to/resource_catalog.jsonl \
+  --provider gemini
+```
+
+Antigravity preset을 바로 쓰려면:
+
+```bash
+python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
+  --image /absolute/path/to/reference.png \
+  --catalog /absolute/path/to/resource_catalog.jsonl \
+  --provider antigravity
+```
+
+Claude preset을 바로 쓰려면:
+
+```bash
+python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
+  --image /absolute/path/to/reference.png \
+  --catalog /absolute/path/to/resource_catalog.jsonl \
+  --provider claude
+```
+
+Claude Code preset을 바로 쓰려면:
+
+```bash
+python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
+  --image /absolute/path/to/reference.png \
+  --catalog /absolute/path/to/resource_catalog.jsonl \
+  --provider claude_code
 ```
 
 Codex OAuth 로그인(`~/.codex/auth.json`)을 그대로 재사용하고 싶다면 별도 `OPENAI_API_KEY` 없이도 같은 명령으로 동작한다. 다른 위치의 auth 파일을 쓰려면:
