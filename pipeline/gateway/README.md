@@ -29,6 +29,13 @@ python3 -m pipeline.gateway
 
 `UNITY_RESOURCE_RAG_GATEWAY_TOKEN`이 설정되면 `Authorization: Bearer ...`가 필요하다.
 
+간단한 시작 예시는 아래와 같다.
+
+```bash
+export UNITY_RESOURCE_RAG_GATEWAY_TOKEN=your-token
+python3 -m pipeline.gateway
+```
+
 ## Gemini Adapter Auth Modes
 
 ### 1. API key
@@ -106,3 +113,10 @@ python3 pipeline/planner/extract_reference_layout.py \
 - 향후 `image_embedding` capability를 추가할 수 있다.
 - `auto` 모드에서는 `GEMINI_API_KEY` -> `GEMINI_OAUTH_TOKEN_FILE` -> 로컬에서 감지된 ADC 순서로 인증 경로를 시도한다.
 - ADC 관련 파일이나 `GOOGLE_APPLICATION_CREDENTIALS`가 보이지 않으면 `auto`는 metadata 탐색을 하지 않고 바로 `auth_required`를 반환한다.
+
+## Troubleshooting
+
+- `401 auth_required`가 나오면 gateway 프로세스와 호출 쪽이 같은 토큰을 보고 있는지 확인한다.
+- 호출 쪽은 `Authorization: Bearer <token>`을 보내야 하고, CLI에서는 `--gateway-auth-token-env`로 토큰 env 이름을 맞춰야 한다.
+- 시작 로그의 `supportedCapabilities` 목록에 없는 capability 이름은 거절된다.
+- 더 긴 체크리스트는 [docs/troubleshooting/v0.3.0-gateway-benchmark-troubleshooting.md](../../docs/troubleshooting/v0.3.0-gateway-benchmark-troubleshooting.md)를 본다.

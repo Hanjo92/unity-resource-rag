@@ -56,6 +56,15 @@ provider 메모:
 - `--gateway-auth-token-env ...`: gateway bearer token env var 이름
 - `--gateway-timeout-ms ...`: gateway request timeout
 
+Benchmark helpers:
+
+- `python3 -m pipeline.evaluation.run_retrieval_benchmark <suite-manifest> <retrieval-result>`
+- `python3 -m pipeline.evaluation.run_screen_benchmark <suite-manifest> <benchmark-report>`
+
+두 runner는 모두 suite manifest와 입력 payload의 `schemaVersion`, `benchmarkName`, `projectName`이 일치해야 통과한다.
+retrieval runner는 `top1HitRate`, `top3HitRate`, `selectedCandidateScore`와 `bindingDecision`을 기준으로 채점하고, screen runner는 fixture threshold와 `repairIterations`/mismatch issue types를 기준으로 채점한다.
+`low_confidence_review`, threshold breach, missing screen result가 자주 나는 실패 원인이다.
+
 MCP tool preset 메모:
 
 - 처음 설정할 때는 CLI 저수준 플래그를 MCP에서 그대로 노출하기보다 `connection_preset`을 먼저 고르는 것을 권장한다

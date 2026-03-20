@@ -199,8 +199,10 @@ MCP tool에서는 처음 설정할 때 저수준 인증 필드를 직접 채우�
 
 - [docs/asset-aware-ui-rag-architecture.md](./docs/asset-aware-ui-rag-architecture.md)
 - [docs/provider-gateway-architecture.md](./docs/provider-gateway-architecture.md)
+- [docs/troubleshooting/v0.3.0-gateway-benchmark-troubleshooting.md](./docs/troubleshooting/v0.3.0-gateway-benchmark-troubleshooting.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 - [pipeline/gateway/README.md](./pipeline/gateway/README.md)
+- [pipeline/workflows/README.md](./pipeline/workflows/README.md)
 - [specs/mcp-sidecar-contract.md](./specs/mcp-sidecar-contract.md)
 - [specs/provider-auth-matrix.md](./specs/provider-auth-matrix.md)
 - [specs/provider-gateway-contract.md](./specs/provider-gateway-contract.md)
