@@ -18,7 +18,10 @@ import numpy as np
 from PIL import Image
 from pydantic import ValidationError
 
-from reference_layout_models import ComponentSpec, ReferenceLayoutPlan
+if __package__ in (None, ""):
+    from reference_layout_models import ComponentSpec, ReferenceLayoutPlan
+else:
+    from .reference_layout_models import ComponentSpec, ReferenceLayoutPlan
 
 
 DEFAULT_MODEL = "gpt-4.1-mini"
@@ -161,6 +164,21 @@ class ResolvedProviderConfig:
     oauth_token_env: str | None
     oauth_token_file: str | None
     oauth_token_command: str | None
+
+
+@dataclass(frozen=True)
+class ProviderSetupInspection:
+    requested_provider: str
+    resolved_provider: str
+    auth_mode: str | None
+    provider_base_url: str | None
+    provider_api_key_env: str
+    token_source: str | None
+    token_source_detail: str | None
+    recommended_choice: str
+    missing_settings: list[str]
+    next_actions: list[str]
+    summary: str
 
 
 def _die(message: str) -> None:
@@ -515,13 +533,210 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
         if _has_readable_codex_auth_file(str(default_codex_auth_file)):
             return ("codex_file", str(default_codex_auth_file))
 
-    _die("OAuth token auth requires --oauth-token-env, --oauth-token-file, --oauth-token-command, or a readable auth file/default token source.")
+    if config.provider in {"openai", "openai_compatible", "auto"}:
+        _die(
+            f"`provider={config.provider}`를 선택했지만 API key/Codex OAuth를 찾지 못했습니다. "
+            "`provider=auto`로 바꾸거나 Codex 로그인 파일 경로를 지정하세요."
+        )
+    _die(
+        f"`provider={config.provider}`는 OAuth 토큰이 필요하지만 사용할 토큰 소스를 찾지 못했습니다. "
+        "`oauth_token_env`, `oauth_token_file`, `oauth_token_command` 중 하나를 지정하거나 기본 인증 파일 경로를 확인하세요."
+    )
+
+
+def _recommended_choice_for_runtime(runtime: ResolvedProviderConfig) -> str:
+    if runtime.requested_provider == "auto":
+        return "connection_preset=recommended_auto"
+    if runtime.provider == "openai" and runtime.auth_mode == "oauth_token":
+        return "connection_preset=codex_oauth"
+    if runtime.provider == "openai" and runtime.auth_mode == "api_key":
+        return "connection_preset=openai_api_key"
+    if runtime.provider == "gemini":
+        return "connection_preset=gemini_api_key"
+    if runtime.provider == "antigravity":
+        return "connection_preset=google_oauth"
+    if runtime.provider == "claude" and runtime.auth_mode == "api_key":
+        return "connection_preset=claude_api_key"
+    if runtime.provider == "claude_code":
+        return "connection_preset=claude_code"
+    if runtime.provider == "local_heuristic":
+        return "connection_preset=offline_local"
+    return f"provider={runtime.provider}"
+
+
+def _missing_settings_for_runtime(
+    runtime: ResolvedProviderConfig,
+    auth: ProviderAuth | None,
+    config: ProviderConfig,
+) -> list[str]:
+    missing: list[str] = []
+
+    if runtime.provider == "openai_compatible" and not runtime.base_url:
+        missing.append("`provider=openai_compatible`에는 `provider_base_url`이 필요합니다.")
+
+    if runtime.provider == "local_heuristic":
+        return missing
+
+    auth_mode = auth.auth_mode if auth else runtime.auth_mode
+    if auth_mode == "api_key":
+        if not os.getenv(runtime.api_key_env):
+            missing.append(f"API key 환경 변수 `{runtime.api_key_env}`가 설정되지 않았습니다.")
+        return missing
+
+    if auth_mode != "oauth_token":
+        missing.append("인증 방식이 결정되지 않았습니다.")
+        return missing
+
+    token_source = auth.token_source if auth else None
+    token_source_detail = None
+    if token_source:
+        if token_source == "env":
+            token_source_detail = runtime.oauth_token_env
+            if not token_source_detail or not os.getenv(token_source_detail):
+                missing.append(f"OAuth 토큰 환경 변수 `{token_source_detail or '(미지정)'}`를 읽을 수 없습니다.")
+        elif token_source == "file":
+            token_source_detail = runtime.oauth_token_file
+            if not _has_readable_token_file(token_source_detail):
+                missing.append(f"OAuth 토큰 파일 `{token_source_detail or '(미지정)'}`을 읽을 수 없습니다.")
+        elif token_source == "command":
+            token_source_detail = runtime.oauth_token_command
+            if not token_source_detail or not _has_command_token(token_source_detail):
+                missing.append(f"OAuth 토큰 명령 `{token_source_detail or '(미지정)'}`이 유효한 토큰을 반환하지 않습니다.")
+        elif token_source == "codex_file":
+            token_source_detail = config.codex_auth_file or str(_default_codex_auth_file())
+            if not _has_readable_codex_auth_file(config.codex_auth_file):
+                missing.append(f"Codex 로그인 파일 `{token_source_detail}`에서 access token을 찾지 못했습니다.")
+        return missing
+
+    missing.append("OAuth 토큰 소스를 찾지 못했습니다.")
+    return missing
+
+
+def _next_actions_for_runtime(
+    runtime: ResolvedProviderConfig,
+    auth: ProviderAuth | None,
+    missing_settings: list[str],
+) -> list[str]:
+    if not missing_settings:
+        if runtime.provider == "local_heuristic":
+            return ["현재 설정으로 로컬 heuristic 점검을 진행할 수 있습니다."]
+        return ["현재 설정으로 실제 workflow 실행을 시작해도 됩니다."]
+
+    if runtime.provider in {"openai", "openai_compatible"}:
+        actions = [
+            "`provider=auto` 또는 `connection_preset=recommended_auto`로 바꿔 자동 감지를 사용합니다.",
+        ]
+        if auth and auth.auth_mode == "oauth_token":
+            actions.append("Codex를 이미 로그인했다면 `codex_auth_file`을 지정하거나 기본 경로(`$CODEX_HOME/auth.json`, `~/.codex/auth.json`)를 확인합니다.")
+        else:
+            actions.append(f"`{runtime.api_key_env}`를 설정하거나 `connection_preset=codex_oauth`를 사용합니다.")
+        if runtime.provider == "openai_compatible":
+            actions.append("커스텀 endpoint를 쓸 때는 `provider_base_url`을 함께 지정합니다.")
+        return actions
+
+    if runtime.provider == "gemini":
+        return [
+            "`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`를 설정합니다.",
+            "자동 감지를 원하면 `provider=auto`로 바꿉니다.",
+        ]
+
+    if runtime.provider == "antigravity":
+        return [
+            "`GOOGLE_OAUTH_ACCESS_TOKEN`을 설정하거나 `gcloud auth application-default print-access-token`이 동작하는지 확인합니다.",
+            "API key 기반 연결이 더 쉽다면 `connection_preset=gemini_api_key`를 사용합니다.",
+        ]
+
+    if runtime.provider == "claude":
+        return [
+            "`ANTHROPIC_API_KEY`를 설정합니다.",
+            "Claude Code credential이 이미 있으면 `connection_preset=claude_code`를 사용합니다.",
+        ]
+
+    if runtime.provider == "claude_code":
+        return [
+            "`ANTHROPIC_AUTH_TOKEN`을 설정하거나 `~/.claude/.credentials.json` 경로를 확인합니다.",
+            "API key 기반 연결이 더 쉽다면 `connection_preset=claude_api_key`를 사용합니다.",
+        ]
+
+    if runtime.provider == "local_heuristic":
+        return ["온라인 provider가 필요 없다면 그대로 진행하고, 실제 모델 호출이 필요하면 `provider=auto`로 바꿉니다."]
+
+    return ["누락된 인증 또는 endpoint 설정을 채운 뒤 다시 진단합니다."]
+
+
+def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
+    runtime = resolve_runtime_provider_config(config)
+    auth: ProviderAuth | None = None
+    auth_error: str | None = None
+
+    if runtime.provider != "local_heuristic":
+        runtime_config = ProviderConfig(
+            provider=runtime.provider,
+            screen_name=config.screen_name,
+            model=runtime.model,
+            detail=config.detail,
+            max_image_dim=config.max_image_dim,
+            project_hints=config.project_hints,
+            api_key_env=runtime.api_key_env,
+            auth_mode=runtime.auth_mode,
+            oauth_token_env=runtime.oauth_token_env,
+            oauth_token_file=runtime.oauth_token_file,
+            oauth_token_command=runtime.oauth_token_command,
+            codex_auth_file=config.codex_auth_file,
+            base_url=runtime.base_url,
+        )
+        try:
+            auth = resolve_provider_auth(runtime_config, require_token=False)
+        except SystemExit as exc:
+            auth_error = str(exc)
+
+    recommended_choice = _recommended_choice_for_runtime(runtime)
+    missing_settings = _missing_settings_for_runtime(runtime, auth, config)
+    if auth_error and auth_error not in missing_settings:
+        missing_settings.append(auth_error)
+    next_actions = _next_actions_for_runtime(runtime, auth, missing_settings)
+
+    token_source = auth.token_source if auth else None
+    token_source_detail = None
+    if token_source == "env":
+        token_source_detail = runtime.oauth_token_env
+    elif token_source == "file":
+        token_source_detail = runtime.oauth_token_file
+    elif token_source == "command":
+        token_source_detail = runtime.oauth_token_command
+    elif token_source == "codex_file":
+        token_source_detail = config.codex_auth_file or str(_default_codex_auth_file())
+
+    if missing_settings:
+        summary = (
+            f"`provider={runtime.requested_provider}` 설정은 현재 `{runtime.provider}`로 해석되지만, "
+            f"누락된 설정이 있어 아직 실행 준비가 끝나지 않았습니다."
+        )
+    else:
+        summary = (
+            f"`provider={runtime.requested_provider}` 설정은 현재 `{runtime.provider}`로 해석되며, "
+            f"실행에 필요한 핵심 설정이 준비되어 있습니다."
+        )
+
+    return ProviderSetupInspection(
+        requested_provider=runtime.requested_provider,
+        resolved_provider=runtime.provider,
+        auth_mode=auth.auth_mode if auth else runtime.auth_mode,
+        provider_base_url=runtime.base_url,
+        provider_api_key_env=runtime.api_key_env,
+        token_source=token_source,
+        token_source_detail=token_source_detail,
+        recommended_choice=recommended_choice,
+        missing_settings=missing_settings,
+        next_actions=next_actions,
+        summary=summary,
+    )
 
 
 def _read_token_from_file(path_value: str) -> str:
     raw = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
     if not raw:
-        _die(f"OAuth token file is empty: {path_value}")
+        _die(f"OAuth 토큰 파일 `{path_value}`가 비어 있습니다. access token 문자열이나 JSON payload를 넣어 주세요.")
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError:
@@ -529,7 +744,7 @@ def _read_token_from_file(path_value: str) -> str:
 
     token = _extract_access_token(payload)
     if not token:
-        _die(f"OAuth token file does not contain an access token: {path_value}")
+        _die(f"OAuth 토큰 파일 `{path_value}`에서 access token을 찾지 못했습니다. JSON 키 이름 또는 파일 내용을 확인하세요.")
     return token
 
 
@@ -554,15 +769,15 @@ def _read_token_from_codex_auth_file(path_value: str | None) -> str:
     try:
         payload = json.loads(auth_file.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        _die(f"Codex auth file not found: {auth_file}")
+        _die(f"Codex 로그인 파일 `{auth_file}`을 찾지 못했습니다. `codex auth login`을 다시 실행하거나 `codex_auth_file` 경로를 확인하세요.")
     except json.JSONDecodeError as exc:
-        _die(f"Codex auth file is not valid JSON: {auth_file} ({exc})")
+        _die(f"Codex 로그인 파일 `{auth_file}` 형식이 올바른 JSON이 아닙니다. 파일 내용을 확인하세요. ({exc})")
     except OSError as exc:
-        _die(f"Failed to read Codex auth file: {auth_file} ({exc})")
+        _die(f"Codex 로그인 파일 `{auth_file}`을 읽지 못했습니다. 권한과 경로를 확인하세요. ({exc})")
 
     token = _extract_access_token(payload)
     if not token:
-        _die(f"Codex auth file does not contain an access token: {auth_file}")
+        _die(f"Codex 로그인 파일 `{auth_file}`에서 access token을 찾지 못했습니다. 다시 로그인하거나 올바른 파일을 지정하세요.")
     return token
 
 
@@ -576,7 +791,7 @@ def _has_readable_codex_auth_file(path_value: str | None) -> bool:
 def _read_token_from_command(command: str) -> str:
     argv = shlex.split(command)
     if not argv:
-        _die("OAuth token command is empty.")
+        _die("OAuth 토큰 명령이 비어 있습니다. 실행 가능한 명령 문자열을 지정하세요.")
 
     completed = subprocess.run(
         argv,
@@ -585,10 +800,13 @@ def _read_token_from_command(command: str) -> str:
         check=False,
     )
     if completed.returncode != 0:
-        _die(f"OAuth token command failed with exit code {completed.returncode}.")
+        _die(
+            f"OAuth 토큰 명령 `{command}` 실행이 실패했습니다. "
+            f"종료 코드: {completed.returncode}. 명령이 현재 셸 환경에서 동작하는지 확인하세요."
+        )
     token = completed.stdout.strip()
     if not token:
-        _die("OAuth token command returned an empty token.")
+        _die(f"OAuth 토큰 명령 `{command}`이 비어 있는 출력을 반환했습니다. 실제 access token을 stdout으로 출력해야 합니다.")
     return token
 
 
@@ -597,7 +815,15 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
     if auth_mode == "api_key":
         token = os.getenv(config.api_key_env)
         if require_token and not token:
-            _die(f"{config.api_key_env} is not set.")
+            if config.provider in {"openai", "openai_compatible"}:
+                _die(
+                    f"`provider={config.provider}`를 선택했지만 API key 또는 Codex OAuth를 찾지 못했습니다. "
+                    f"`provider=auto`로 바꾸거나 `{config.api_key_env}`를 설정하고, Codex 로그인을 재사용하려면 `auth_mode=oauth_token` 또는 `codex_auth_file`을 지정하세요."
+                )
+            _die(
+                f"`provider={config.provider}`를 선택했지만 필요한 API key를 찾지 못했습니다. "
+                f"환경 변수 `{config.api_key_env}`를 설정하거나 `provider=auto`로 바꿔 자동 감지를 사용하세요."
+            )
         return ProviderAuth(auth_mode="api_key", bearer_token=token, token_source="env")
 
     token_source, source_value = _resolve_oauth_token_source(config)
@@ -607,7 +833,10 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
             assert source_value is not None
             token = os.getenv(source_value)
             if not token:
-                _die(f"{source_value} is not set.")
+                _die(
+                    f"`provider={config.provider}`는 OAuth 토큰이 필요하지만 환경 변수 `{source_value}`를 찾지 못했습니다. "
+                    "토큰 환경 변수를 설정하거나 다른 토큰 소스를 지정하세요."
+                )
         elif token_source == "file":
             assert source_value is not None
             token = _read_token_from_file(source_value)
@@ -892,7 +1121,10 @@ def extract_plan(
 
     if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
         if resolved_provider == "openai_compatible" and not runtime.base_url:
-            _die("--provider-base-url is required for --provider openai_compatible.")
+            _die(
+                "`provider=openai_compatible`를 선택했지만 `provider_base_url`이 비어 있습니다. "
+                "커스텀 OpenAI-compatible endpoint를 쓰려면 base URL을 함께 지정하세요."
+            )
         plan, report = extract_with_openai_like(
             image_path=image_path,
             config=config,
@@ -926,40 +1158,29 @@ def dry_run_payload(
 ) -> dict[str, Any]:
     _, image_meta = prepare_analysis_image(image_path, config.max_image_dim)
     runtime = resolve_runtime_provider_config(config)
+    inspection = inspect_provider_setup(config)
     resolved_provider = runtime.provider
     preview = {
         "mode": "dry-run",
-        "requestedProvider": config.provider,
-        "resolvedProvider": resolved_provider,
+        "requestedProvider": inspection.requested_provider,
+        "resolvedProvider": inspection.resolved_provider,
         "model": runtime.model,
         "screenName": config.screen_name,
         "imagePath": str(image_path),
         "image": image_meta,
         "detail": config.detail,
         "projectHints": config.project_hints,
-        "providerBaseUrl": runtime.base_url,
-        "providerApiKeyEnv": runtime.api_key_env,
+        "providerBaseUrl": inspection.provider_base_url,
+        "providerApiKeyEnv": inspection.provider_api_key_env,
+        "authMode": inspection.auth_mode,
+        "tokenSource": inspection.token_source,
+        "recommendedChoice": inspection.recommended_choice,
+        "missingSettings": inspection.missing_settings,
+        "nextActions": inspection.next_actions,
+        "setupSummary": inspection.summary,
     }
 
     if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
-        runtime_config = ProviderConfig(
-            provider=runtime.provider,
-            screen_name=config.screen_name,
-            model=runtime.model,
-            detail=config.detail,
-            max_image_dim=config.max_image_dim,
-            project_hints=config.project_hints,
-            api_key_env=runtime.api_key_env,
-            auth_mode=runtime.auth_mode,
-            oauth_token_env=runtime.oauth_token_env,
-            oauth_token_file=runtime.oauth_token_file,
-            oauth_token_command=runtime.oauth_token_command,
-            codex_auth_file=config.codex_auth_file,
-            base_url=runtime.base_url,
-        )
-        auth = resolve_provider_auth(runtime_config, require_token=False)
-        preview["authMode"] = auth.auth_mode
-        preview["tokenSource"] = auth.token_source
         preview["instructionsPreview"] = SYSTEM_PROMPT
         preview["userPromptPreview"] = build_user_prompt(
             screen_name=config.screen_name,

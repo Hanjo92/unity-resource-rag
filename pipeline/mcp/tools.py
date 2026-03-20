@@ -8,6 +8,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from pipeline.planner.extract_reference_layout import (
+        DEFAULT_DETAIL,
+        DEFAULT_MAX_IMAGE_DIM,
+        DEFAULT_MODEL,
+        ProviderConfig,
+        inspect_provider_setup as inspect_provider_setup_config,
+    )
+else:
+    from ..planner.extract_reference_layout import (
+        DEFAULT_DETAIL,
+        DEFAULT_MAX_IMAGE_DIM,
+        DEFAULT_MODEL,
+        ProviderConfig,
+        inspect_provider_setup as inspect_provider_setup_config,
+    )
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_ROOT = REPO_ROOT / "pipeline"
@@ -114,8 +134,9 @@ def _run_script(script_path: Path, args: list[str], *, cwd: Path | None = None, 
     }
 
     if completed.returncode != 0:
+        error_message = stderr or payload.get("error") or stdout or f"Command failed with exit code {completed.returncode}."
         raise ToolExecutionError(
-            f"Command failed with exit code {completed.returncode}.",
+            error_message,
             details=payload,
         )
 
@@ -244,6 +265,24 @@ def _build_build_mcp_handoff_bundle_schema() -> dict[str, Any]:
     }
 
 
+def _build_inspect_provider_setup_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+        },
+        "additionalProperties": False,
+    }
+
+
 def _format_tool_result(title: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = {
         "title": title,
@@ -273,6 +312,20 @@ def _format_tool_error(message: str, details: dict[str, Any] | None = None) -> d
         ],
         "isError": True,
     }
+
+
+def _format_inspection_summary(payload: dict[str, Any]) -> str:
+    missing_settings = payload.get("missingSettings") or ["없음"]
+    next_actions = payload.get("nextActions") or ["없음"]
+    return "\n".join([
+        f"현재 권장 선택: {payload['recommendedChoice']}",
+        f"실제로 해석된 provider: {payload['resolvedProvider']}",
+        f"토큰 소스: {payload['tokenSourceSummary']}",
+        "누락된 설정:",
+        *[f"- {item}" for item in missing_settings],
+        "다음 액션:",
+        *[f"- {item}" for item in next_actions],
+    ])
 
 
 def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
@@ -312,6 +365,67 @@ def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
 
     payload = _run_script(script_path, [command[0], *opts])
     return _format_tool_result("extract_reference_layout", payload)
+
+
+def inspect_provider_setup(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
+    provider = str(args.get("provider") or "auto")
+    config = ProviderConfig(
+        provider=provider,
+        screen_name="inspect-provider-setup",
+        model=DEFAULT_MODEL,
+        detail=DEFAULT_DETAIL,
+        max_image_dim=DEFAULT_MAX_IMAGE_DIM,
+        project_hints=[],
+        api_key_env=str(args.get("provider_api_key_env") or "OPENAI_API_KEY"),
+        auth_mode=str(args["auth_mode"]) if args.get("auth_mode") else None,
+        oauth_token_env=str(args["oauth_token_env"]) if args.get("oauth_token_env") else None,
+        oauth_token_file=str(args["oauth_token_file"]) if args.get("oauth_token_file") else None,
+        oauth_token_command=str(args["oauth_token_command"]) if args.get("oauth_token_command") else None,
+        codex_auth_file=str(args["codex_auth_file"]) if args.get("codex_auth_file") else None,
+        base_url=str(args["provider_base_url"]) if args.get("provider_base_url") else None,
+    )
+
+    inspection = inspect_provider_setup_config(config)
+    token_source_summary = "불필요 (local_heuristic)" if inspection.resolved_provider == "local_heuristic" else "미확인"
+    if inspection.auth_mode == "api_key":
+        token_source_summary = f"API key 환경 변수 `{inspection.provider_api_key_env}`"
+    elif inspection.token_source == "env" and inspection.token_source_detail:
+        token_source_summary = f"환경 변수 `{inspection.token_source_detail}`"
+    elif inspection.token_source == "file" and inspection.token_source_detail:
+        token_source_summary = f"토큰 파일 `{inspection.token_source_detail}`"
+    elif inspection.token_source == "command" and inspection.token_source_detail:
+        token_source_summary = f"토큰 명령 `{inspection.token_source_detail}`"
+    elif inspection.token_source == "codex_file" and inspection.token_source_detail:
+        token_source_summary = f"Codex 로그인 파일 `{inspection.token_source_detail}`"
+
+    payload = {
+        "requestedProvider": inspection.requested_provider,
+        "resolvedProvider": inspection.resolved_provider,
+        "authMode": inspection.auth_mode,
+        "providerBaseUrl": inspection.provider_base_url,
+        "providerApiKeyEnv": inspection.provider_api_key_env,
+        "tokenSource": inspection.token_source,
+        "tokenSourceDetail": inspection.token_source_detail,
+        "tokenSourceSummary": token_source_summary,
+        "recommendedChoice": inspection.recommended_choice,
+        "missingSettings": inspection.missing_settings,
+        "nextActions": inspection.next_actions,
+        "summary": inspection.summary,
+    }
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": _format_inspection_summary(payload),
+            },
+            {
+                "type": "text",
+                "text": json.dumps(payload, ensure_ascii=False, indent=2),
+            },
+        ],
+        "isError": False,
+    }
 
 
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
@@ -391,6 +505,12 @@ def build_mcp_handoff_bundle(args: dict[str, Any]) -> dict[str, Any]:
 
 
 TOOLS: list[ToolSpec] = [
+    ToolSpec(
+        name="unity_rag.inspect_provider_setup",
+        description="실제 workflow 실행 전 provider/auth 설정만 진단한다. 처음 연결할 때는 이 tool로 권장 preset, 해석된 provider, 토큰 소스, 누락된 설정, 다음 액션을 먼저 확인하는 것이 좋다.",
+        input_schema=_build_inspect_provider_setup_schema(),
+        handler=inspect_provider_setup,
+    ),
     ToolSpec(
         name="unity_rag.extract_reference_layout",
         description="레퍼런스 이미지에서 reference layout plan JSON을 추출한다. 처음 설정할 때는 `connection_preset=recommended_auto`를 고르는 것이 권장되고, Codex OAuth를 확실히 쓰고 싶으면 `codex_oauth`, 완전 오프라인 점검이면 `offline_local`을 고르면 된다.",
