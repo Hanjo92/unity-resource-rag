@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "unity-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "unity-mcp"
+      ],
+      "cwd": "/absolute/path/to/unity-project"
+    },
+    "unity-resource-rag": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "pipeline.mcp"
+      ],
+      "cwd": "/absolute/path/to/unity-resource-rag",
+      "env": {
+        "OPENAI_API_KEY": "your-openai-api-key"
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from dataclasses import dataclass
 from io import BytesIO
@@ -17,14 +18,90 @@ import numpy as np
 from PIL import Image
 from pydantic import ValidationError
 
-from reference_layout_models import ComponentSpec, ReferenceLayoutPlan
+if __package__ in (None, ""):
+    from reference_layout_models import ComponentSpec, ReferenceLayoutPlan
+else:
+    from .reference_layout_models import ComponentSpec, ReferenceLayoutPlan
 
 
 DEFAULT_MODEL = "gpt-4.1-mini"
 DEFAULT_DETAIL = "high"
 DEFAULT_MAX_IMAGE_DIM = 1600
 DEFAULT_PROVIDER = "auto"
-SUPPORTED_PROVIDERS = ("auto", "openai", "openai_compatible", "local_heuristic")
+SUPPORTED_PROVIDERS = ("auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic")
+DEFAULT_CODEX_AUTH_FILE = "auth.json"
+DEFAULT_CLAUDE_CODE_AUTH_FILE = ".credentials.json"
+DEFAULT_GOOGLE_OAUTH_COMMAND = "gcloud auth application-default print-access-token"
+PROVIDER_DEFAULTS: dict[str, dict[str, str | None]] = {
+    "openai": {
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": None,
+        "default_model": DEFAULT_MODEL,
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "gemini": {
+        "api_key_env": "GEMINI_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-flash",
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "antigravity": {
+        "api_key_env": "GOOGLE_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-flash",
+        "default_auth_mode": "oauth_token",
+        "default_oauth_token_env": "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": DEFAULT_GOOGLE_OAUTH_COMMAND,
+    },
+    "claude": {
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url": "https://api.anthropic.com/v1/",
+        "default_model": "claude-opus-4-6",
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "claude_code": {
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url": "https://api.anthropic.com/v1/",
+        "default_model": "claude-opus-4-6",
+        "default_auth_mode": "oauth_token",
+        "default_oauth_token_env": "ANTHROPIC_AUTH_TOKEN",
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "openai_compatible": {
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": None,
+        "default_model": DEFAULT_MODEL,
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+}
+TOKEN_KEY_CANDIDATES = (
+    ("access_token",),
+    ("accessToken",),
+    ("tokens", "access_token"),
+    ("tokens", "accessToken"),
+    ("credentials", "access_token"),
+    ("credentials", "accessToken"),
+    ("auth", "access_token"),
+    ("auth", "accessToken"),
+    ("claudeAiOauth", "accessToken"),
+    ("claudeAiOauth", "access_token"),
+    ("oauth", "accessToken"),
+    ("oauth", "access_token"),
+)
 
 
 SYSTEM_PROMPT = """
@@ -65,6 +142,7 @@ class ProviderConfig:
     oauth_token_env: str | None
     oauth_token_file: str | None
     oauth_token_command: str | None
+    codex_auth_file: str | None
     base_url: str | None
 
 
@@ -73,6 +151,34 @@ class ProviderAuth:
     auth_mode: str
     bearer_token: str | None
     token_source: str
+
+
+@dataclass(frozen=True)
+class ResolvedProviderConfig:
+    requested_provider: str
+    provider: str
+    api_key_env: str
+    base_url: str | None
+    model: str
+    auth_mode: str | None
+    oauth_token_env: str | None
+    oauth_token_file: str | None
+    oauth_token_command: str | None
+
+
+@dataclass(frozen=True)
+class ProviderSetupInspection:
+    requested_provider: str
+    resolved_provider: str
+    auth_mode: str | None
+    provider_base_url: str | None
+    provider_api_key_env: str
+    token_source: str | None
+    token_source_detail: str | None
+    recommended_choice: str
+    missing_settings: list[str]
+    next_actions: list[str]
+    summary: str
 
 
 def _die(message: str) -> None:
@@ -210,14 +316,197 @@ def normalize_plan(plan: ReferenceLayoutPlan, *, screen_name: str, image_meta: d
     return ReferenceLayoutPlan.model_validate(data)
 
 
+def _provider_defaults(provider: str) -> dict[str, str | None]:
+    return PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
+
+
+def _default_claude_code_auth_file() -> Path:
+    claude_config_dir = os.getenv("CLAUDE_CONFIG_DIR")
+    base_dir = Path(claude_config_dir).expanduser() if claude_config_dir else Path.home() / ".claude"
+    return base_dir / DEFAULT_CLAUDE_CODE_AUTH_FILE
+
+
+def _default_token_file_for_provider(provider: str) -> str | None:
+    if provider == "claude_code":
+        return str(_default_claude_code_auth_file())
+    return None
+
+
+def _command_exists(command: str) -> bool:
+    argv = shlex.split(command)
+    if not argv:
+        return False
+    return shutil.which(argv[0]) is not None
+
+
+def _has_command_token(command: str) -> bool:
+    if not _command_exists(command):
+        return False
+    try:
+        return bool(_read_token_from_command(command))
+    except SystemExit:
+        return False
+
+
+def resolve_runtime_provider_config(config: ProviderConfig) -> ResolvedProviderConfig:
+    requested_provider = config.provider
+
+    if requested_provider == "auto":
+        if has_provider_auth(config):
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="openai",
+                api_key_env=config.api_key_env,
+                base_url=None,
+                model=config.model,
+                auth_mode=config.auth_mode,
+                oauth_token_env=config.oauth_token_env,
+                oauth_token_file=config.oauth_token_file,
+                oauth_token_command=config.oauth_token_command,
+            )
+        if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+            defaults = _provider_defaults("gemini")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="gemini",
+                api_key_env="GOOGLE_API_KEY" if os.getenv("GOOGLE_API_KEY") else str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("gemini"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("GOOGLE_OAUTH_ACCESS_TOKEN") or _has_command_token(DEFAULT_GOOGLE_OAUTH_COMMAND):
+            defaults = _provider_defaults("antigravity")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="antigravity",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("antigravity"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("ANTHROPIC_API_KEY"):
+            defaults = _provider_defaults("claude")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="claude",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("claude"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("ANTHROPIC_AUTH_TOKEN") or _has_readable_token_file(_default_token_file_for_provider("claude_code")):
+            defaults = _provider_defaults("claude_code")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="claude_code",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("claude_code"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        return ResolvedProviderConfig(
+            requested_provider=requested_provider,
+            provider="local_heuristic",
+            api_key_env=config.api_key_env,
+            base_url=None,
+            model=config.model,
+            auth_mode=config.auth_mode,
+            oauth_token_env=config.oauth_token_env,
+            oauth_token_file=config.oauth_token_file,
+            oauth_token_command=config.oauth_token_command,
+        )
+
+    if requested_provider == "local_heuristic":
+        return ResolvedProviderConfig(
+            requested_provider=requested_provider,
+            provider="local_heuristic",
+            api_key_env=config.api_key_env,
+            base_url=None,
+            model=config.model,
+            auth_mode=config.auth_mode,
+            oauth_token_env=config.oauth_token_env,
+            oauth_token_file=config.oauth_token_file,
+            oauth_token_command=config.oauth_token_command,
+        )
+
+    defaults = _provider_defaults(requested_provider)
+    base_url = config.base_url if config.base_url else defaults["base_url"]
+    api_key_env = config.api_key_env
+    if api_key_env == "OPENAI_API_KEY" and defaults["api_key_env"]:
+        api_key_env = str(defaults["api_key_env"])
+
+    model = config.model
+    if model == DEFAULT_MODEL and defaults["default_model"]:
+        model = str(defaults["default_model"])
+
+    auth_mode = config.auth_mode or defaults["default_auth_mode"]
+    oauth_token_env = config.oauth_token_env or defaults["default_oauth_token_env"]
+    oauth_token_file = config.oauth_token_file or _default_token_file_for_provider(requested_provider)
+    oauth_token_command = config.oauth_token_command or defaults["default_oauth_token_command"]
+
+    return ResolvedProviderConfig(
+        requested_provider=requested_provider,
+        provider=requested_provider,
+        api_key_env=api_key_env,
+        base_url=base_url,
+        model=model,
+        auth_mode=auth_mode,
+        oauth_token_env=oauth_token_env,
+        oauth_token_file=oauth_token_file,
+        oauth_token_command=oauth_token_command,
+    )
+
+
 def _configured_auth_mode(config: ProviderConfig) -> str:
     if config.auth_mode and config.auth_mode not in {"api_key", "oauth_token"}:
         _die(f"Unsupported auth mode: {config.auth_mode}")
-    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command:
+    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command or config.codex_auth_file:
         return "oauth_token"
     if config.auth_mode:
         return config.auth_mode
+    if os.getenv(config.api_key_env):
+        return "api_key"
+    if config.provider in {"auto", "openai", "openai_compatible"} and _has_readable_codex_auth_file(None):
+        return "oauth_token"
     return "api_key"
+
+
+def _default_codex_auth_file() -> Path:
+    codex_home = os.getenv("CODEX_HOME")
+    base_dir = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+    return base_dir / DEFAULT_CODEX_AUTH_FILE
+
+
+def _extract_nested_string(payload: Any, key_path: tuple[str, ...]) -> str | None:
+    current = payload
+    for key in key_path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    if isinstance(current, str):
+        token = current.strip()
+        return token or None
+    return None
+
+
+def _extract_access_token(payload: Any) -> str | None:
+    for key_path in TOKEN_KEY_CANDIDATES:
+        token = _extract_nested_string(payload, key_path)
+        if token:
+            return token
+    return None
 
 
 def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None]:
@@ -225,19 +514,237 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
         ("env", config.oauth_token_env),
         ("file", config.oauth_token_file),
         ("command", config.oauth_token_command),
+        ("codex_file", config.codex_auth_file),
     ]
     configured = [(name, value) for name, value in sources if value]
-    if len(configured) > 1:
-        _die("Provide only one OAuth token source: --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
-    if not configured:
-        _die("OAuth token auth requires one of --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
-    return configured[0]
+    if configured:
+        return configured[0]
+
+    if config.provider == "claude_code":
+        default_claude_file = _default_claude_code_auth_file()
+        if _has_readable_token_file(str(default_claude_file)):
+            return ("file", str(default_claude_file))
+
+    if config.provider == "antigravity" and _has_command_token(DEFAULT_GOOGLE_OAUTH_COMMAND):
+        return ("command", DEFAULT_GOOGLE_OAUTH_COMMAND)
+
+    if config.provider in {"auto", "openai", "openai_compatible"}:
+        default_codex_auth_file = _default_codex_auth_file()
+        if _has_readable_codex_auth_file(str(default_codex_auth_file)):
+            return ("codex_file", str(default_codex_auth_file))
+
+    if config.provider in {"openai", "openai_compatible", "auto"}:
+        _die(
+            f"`provider={config.provider}`를 선택했지만 API key/Codex OAuth를 찾지 못했습니다. "
+            "`provider=auto`로 바꾸거나 Codex 로그인 파일 경로를 지정하세요."
+        )
+    _die(
+        f"`provider={config.provider}`는 OAuth 토큰이 필요하지만 사용할 토큰 소스를 찾지 못했습니다. "
+        "`oauth_token_env`, `oauth_token_file`, `oauth_token_command` 중 하나를 지정하거나 기본 인증 파일 경로를 확인하세요."
+    )
+
+
+def _recommended_choice_for_runtime(runtime: ResolvedProviderConfig) -> str:
+    if runtime.requested_provider == "auto":
+        return "connection_preset=recommended_auto"
+    if runtime.provider == "openai" and runtime.auth_mode == "oauth_token":
+        return "connection_preset=codex_oauth"
+    if runtime.provider == "openai" and runtime.auth_mode == "api_key":
+        return "connection_preset=openai_api_key"
+    if runtime.provider == "gemini":
+        return "connection_preset=gemini_api_key"
+    if runtime.provider == "antigravity":
+        return "connection_preset=google_oauth"
+    if runtime.provider == "claude" and runtime.auth_mode == "api_key":
+        return "connection_preset=claude_api_key"
+    if runtime.provider == "claude_code":
+        return "connection_preset=claude_code"
+    if runtime.provider == "local_heuristic":
+        return "connection_preset=offline_local"
+    return f"provider={runtime.provider}"
+
+
+def _missing_settings_for_runtime(
+    runtime: ResolvedProviderConfig,
+    auth: ProviderAuth | None,
+    config: ProviderConfig,
+) -> list[str]:
+    missing: list[str] = []
+
+    if runtime.provider == "openai_compatible" and not runtime.base_url:
+        missing.append("`provider=openai_compatible`에는 `provider_base_url`이 필요합니다.")
+
+    if runtime.provider == "local_heuristic":
+        return missing
+
+    auth_mode = auth.auth_mode if auth else runtime.auth_mode
+    if auth_mode == "api_key":
+        if not os.getenv(runtime.api_key_env):
+            missing.append(f"API key 환경 변수 `{runtime.api_key_env}`가 설정되지 않았습니다.")
+        return missing
+
+    if auth_mode != "oauth_token":
+        missing.append("인증 방식이 결정되지 않았습니다.")
+        return missing
+
+    token_source = auth.token_source if auth else None
+    token_source_detail = None
+    if token_source:
+        if token_source == "env":
+            token_source_detail = runtime.oauth_token_env
+            if not token_source_detail or not os.getenv(token_source_detail):
+                missing.append(f"OAuth 토큰 환경 변수 `{token_source_detail or '(미지정)'}`를 읽을 수 없습니다.")
+        elif token_source == "file":
+            token_source_detail = runtime.oauth_token_file
+            if not _has_readable_token_file(token_source_detail):
+                missing.append(f"OAuth 토큰 파일 `{token_source_detail or '(미지정)'}`을 읽을 수 없습니다.")
+        elif token_source == "command":
+            token_source_detail = runtime.oauth_token_command
+            if not token_source_detail or not _has_command_token(token_source_detail):
+                missing.append(f"OAuth 토큰 명령 `{token_source_detail or '(미지정)'}`이 유효한 토큰을 반환하지 않습니다.")
+        elif token_source == "codex_file":
+            token_source_detail = config.codex_auth_file or str(_default_codex_auth_file())
+            if not _has_readable_codex_auth_file(config.codex_auth_file):
+                missing.append(f"Codex 로그인 파일 `{token_source_detail}`에서 access token을 찾지 못했습니다.")
+        return missing
+
+    missing.append("OAuth 토큰 소스를 찾지 못했습니다.")
+    return missing
+
+
+def _next_actions_for_runtime(
+    runtime: ResolvedProviderConfig,
+    auth: ProviderAuth | None,
+    missing_settings: list[str],
+) -> list[str]:
+    if not missing_settings:
+        if runtime.provider == "local_heuristic":
+            return ["현재 설정으로 로컬 heuristic 점검을 진행할 수 있습니다."]
+        return ["현재 설정으로 실제 workflow 실행을 시작해도 됩니다."]
+
+    if runtime.provider in {"openai", "openai_compatible"}:
+        actions = [
+            "`provider=auto` 또는 `connection_preset=recommended_auto`로 바꿔 자동 감지를 사용합니다.",
+        ]
+        if auth and auth.auth_mode == "oauth_token":
+            actions.append("Codex를 이미 로그인했다면 `codex_auth_file`을 지정하거나 기본 경로(`$CODEX_HOME/auth.json`, `~/.codex/auth.json`)를 확인합니다.")
+        else:
+            actions.append(f"`{runtime.api_key_env}`를 설정하거나 `connection_preset=codex_oauth`를 사용합니다.")
+        if runtime.provider == "openai_compatible":
+            actions.append("커스텀 endpoint를 쓸 때는 `provider_base_url`을 함께 지정합니다.")
+        return actions
+
+    if runtime.provider == "gemini":
+        return [
+            "`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`를 설정합니다.",
+            "자동 감지를 원하면 `provider=auto`로 바꿉니다.",
+        ]
+
+    if runtime.provider == "antigravity":
+        return [
+            "`GOOGLE_OAUTH_ACCESS_TOKEN`을 설정하거나 `gcloud auth application-default print-access-token`이 동작하는지 확인합니다.",
+            "API key 기반 연결이 더 쉽다면 `connection_preset=gemini_api_key`를 사용합니다.",
+        ]
+
+    if runtime.provider == "claude":
+        return [
+            "`ANTHROPIC_API_KEY`를 설정합니다.",
+            "Claude Code credential이 이미 있으면 `connection_preset=claude_code`를 사용합니다.",
+        ]
+
+    if runtime.provider == "claude_code":
+        return [
+            "`ANTHROPIC_AUTH_TOKEN`을 설정하거나 `~/.claude/.credentials.json` 경로를 확인합니다.",
+            "API key 기반 연결이 더 쉽다면 `connection_preset=claude_api_key`를 사용합니다.",
+        ]
+
+    if runtime.provider == "local_heuristic":
+        return ["온라인 provider가 필요 없다면 그대로 진행하고, 실제 모델 호출이 필요하면 `provider=auto`로 바꿉니다."]
+
+    return ["누락된 인증 또는 endpoint 설정을 채운 뒤 다시 진단합니다."]
+
+
+def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
+    runtime = resolve_runtime_provider_config(config)
+    auth: ProviderAuth | None = None
+    auth_error: str | None = None
+
+    if runtime.provider != "local_heuristic":
+        runtime_config = ProviderConfig(
+            provider=runtime.provider,
+            screen_name=config.screen_name,
+            model=runtime.model,
+            detail=config.detail,
+            max_image_dim=config.max_image_dim,
+            project_hints=config.project_hints,
+            api_key_env=runtime.api_key_env,
+            auth_mode=runtime.auth_mode,
+            oauth_token_env=runtime.oauth_token_env,
+            oauth_token_file=runtime.oauth_token_file,
+            oauth_token_command=runtime.oauth_token_command,
+            codex_auth_file=config.codex_auth_file,
+            base_url=runtime.base_url,
+        )
+        try:
+            auth = resolve_provider_auth(runtime_config, require_token=False)
+        except SystemExit as exc:
+            auth_error = str(exc)
+
+    recommended_choice = _recommended_choice_for_runtime(runtime)
+    missing_settings = _missing_settings_for_runtime(runtime, auth, config)
+    if auth_error and auth_error not in missing_settings:
+        missing_settings.append(auth_error)
+    next_actions = _next_actions_for_runtime(runtime, auth, missing_settings)
+
+    token_source = auth.token_source if auth else None
+    token_source_detail = None
+    if token_source == "env":
+        token_source_detail = runtime.oauth_token_env
+    elif token_source == "file":
+        token_source_detail = runtime.oauth_token_file
+    elif token_source == "command":
+        token_source_detail = runtime.oauth_token_command
+    elif token_source == "codex_file":
+        token_source_detail = config.codex_auth_file or str(_default_codex_auth_file())
+
+    if missing_settings:
+        summary = (
+            f"`provider={runtime.requested_provider}` 설정은 현재 `{runtime.provider}`로 해석되지만, "
+            f"누락된 설정이 있어 아직 실행 준비가 끝나지 않았습니다."
+        )
+    else:
+        summary = (
+            f"`provider={runtime.requested_provider}` 설정은 현재 `{runtime.provider}`로 해석되며, "
+            f"실행에 필요한 핵심 설정이 준비되어 있습니다."
+        )
+
+    return ProviderSetupInspection(
+        requested_provider=runtime.requested_provider,
+        resolved_provider=runtime.provider,
+        auth_mode=auth.auth_mode if auth else runtime.auth_mode,
+        provider_base_url=runtime.base_url,
+        provider_api_key_env=runtime.api_key_env,
+        token_source=token_source,
+        token_source_detail=token_source_detail,
+        recommended_choice=recommended_choice,
+        missing_settings=missing_settings,
+        next_actions=next_actions,
+        summary=summary,
+    )
 
 
 def _read_token_from_file(path_value: str) -> str:
-    token = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    raw = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    if not raw:
+        _die(f"OAuth 토큰 파일 `{path_value}`가 비어 있습니다. access token 문자열이나 JSON payload를 넣어 주세요.")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+    token = _extract_access_token(payload)
     if not token:
-        _die(f"OAuth token file is empty: {path_value}")
+        _die(f"OAuth 토큰 파일 `{path_value}`에서 access token을 찾지 못했습니다. JSON 키 이름 또는 파일 내용을 확인하세요.")
     return token
 
 
@@ -250,15 +757,41 @@ def _has_readable_token_file(path_value: str | None) -> bool:
         return False
 
     try:
-        return bool(token_file.read_text(encoding="utf-8").strip())
+        return bool(_read_token_from_file(str(token_file)))
     except OSError:
+        return False
+    except SystemExit:
+        return False
+
+
+def _read_token_from_codex_auth_file(path_value: str | None) -> str:
+    auth_file = Path(path_value).expanduser() if path_value else _default_codex_auth_file()
+    try:
+        payload = json.loads(auth_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _die(f"Codex 로그인 파일 `{auth_file}`을 찾지 못했습니다. `codex auth login`을 다시 실행하거나 `codex_auth_file` 경로를 확인하세요.")
+    except json.JSONDecodeError as exc:
+        _die(f"Codex 로그인 파일 `{auth_file}` 형식이 올바른 JSON이 아닙니다. 파일 내용을 확인하세요. ({exc})")
+    except OSError as exc:
+        _die(f"Codex 로그인 파일 `{auth_file}`을 읽지 못했습니다. 권한과 경로를 확인하세요. ({exc})")
+
+    token = _extract_access_token(payload)
+    if not token:
+        _die(f"Codex 로그인 파일 `{auth_file}`에서 access token을 찾지 못했습니다. 다시 로그인하거나 올바른 파일을 지정하세요.")
+    return token
+
+
+def _has_readable_codex_auth_file(path_value: str | None) -> bool:
+    try:
+        return bool(_read_token_from_codex_auth_file(path_value))
+    except SystemExit:
         return False
 
 
 def _read_token_from_command(command: str) -> str:
     argv = shlex.split(command)
     if not argv:
-        _die("OAuth token command is empty.")
+        _die("OAuth 토큰 명령이 비어 있습니다. 실행 가능한 명령 문자열을 지정하세요.")
 
     completed = subprocess.run(
         argv,
@@ -267,10 +800,13 @@ def _read_token_from_command(command: str) -> str:
         check=False,
     )
     if completed.returncode != 0:
-        _die(f"OAuth token command failed with exit code {completed.returncode}.")
+        _die(
+            f"OAuth 토큰 명령 `{command}` 실행이 실패했습니다. "
+            f"종료 코드: {completed.returncode}. 명령이 현재 셸 환경에서 동작하는지 확인하세요."
+        )
     token = completed.stdout.strip()
     if not token:
-        _die("OAuth token command returned an empty token.")
+        _die(f"OAuth 토큰 명령 `{command}`이 비어 있는 출력을 반환했습니다. 실제 access token을 stdout으로 출력해야 합니다.")
     return token
 
 
@@ -279,7 +815,15 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
     if auth_mode == "api_key":
         token = os.getenv(config.api_key_env)
         if require_token and not token:
-            _die(f"{config.api_key_env} is not set.")
+            if config.provider in {"openai", "openai_compatible"}:
+                _die(
+                    f"`provider={config.provider}`를 선택했지만 API key 또는 Codex OAuth를 찾지 못했습니다. "
+                    f"`provider=auto`로 바꾸거나 `{config.api_key_env}`를 설정하고, Codex 로그인을 재사용하려면 `auth_mode=oauth_token` 또는 `codex_auth_file`을 지정하세요."
+                )
+            _die(
+                f"`provider={config.provider}`를 선택했지만 필요한 API key를 찾지 못했습니다. "
+                f"환경 변수 `{config.api_key_env}`를 설정하거나 `provider=auto`로 바꿔 자동 감지를 사용하세요."
+            )
         return ProviderAuth(auth_mode="api_key", bearer_token=token, token_source="env")
 
     token_source, source_value = _resolve_oauth_token_source(config)
@@ -289,13 +833,18 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
             assert source_value is not None
             token = os.getenv(source_value)
             if not token:
-                _die(f"{source_value} is not set.")
+                _die(
+                    f"`provider={config.provider}`는 OAuth 토큰이 필요하지만 환경 변수 `{source_value}`를 찾지 못했습니다. "
+                    "토큰 환경 변수를 설정하거나 다른 토큰 소스를 지정하세요."
+                )
         elif token_source == "file":
             assert source_value is not None
             token = _read_token_from_file(source_value)
         elif token_source == "command":
             assert source_value is not None
             token = _read_token_from_command(source_value)
+        elif token_source == "codex_file":
+            token = _read_token_from_codex_auth_file(source_value)
         else:
             _die(f"Unsupported OAuth token source: {token_source}")
 
@@ -313,13 +862,13 @@ def has_provider_auth(config: ProviderConfig) -> bool:
         return bool(os.getenv(source_value))
     if token_source == "file":
         return _has_readable_token_file(source_value)
+    if token_source == "codex_file":
+        return _has_readable_codex_auth_file(source_value)
     return bool(source_value)
 
 
 def resolve_provider(config: ProviderConfig) -> str:
-    if config.provider != "auto":
-        return config.provider
-    return "openai" if has_provider_auth(config) else "local_heuristic"
+    return resolve_runtime_provider_config(config).provider
 
 
 def create_openai_client(*, auth: ProviderAuth, base_url: str | None):
@@ -338,15 +887,29 @@ def extract_with_openai_like(
     *,
     image_path: Path,
     config: ProviderConfig,
-    provider_name: str,
-    base_url: str | None,
+    runtime: ResolvedProviderConfig,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
     data_url, image_meta = encode_image_data_url(image_path, config.max_image_dim)
-    auth = resolve_provider_auth(config)
-    client = create_openai_client(auth=auth, base_url=base_url)
+    runtime_config = ProviderConfig(
+        provider=runtime.provider,
+        screen_name=config.screen_name,
+        model=runtime.model,
+        detail=config.detail,
+        max_image_dim=config.max_image_dim,
+        project_hints=config.project_hints,
+        api_key_env=runtime.api_key_env,
+        auth_mode=runtime.auth_mode,
+        oauth_token_env=runtime.oauth_token_env,
+        oauth_token_file=runtime.oauth_token_file,
+        oauth_token_command=runtime.oauth_token_command,
+        codex_auth_file=config.codex_auth_file,
+        base_url=runtime.base_url,
+    )
+    auth = resolve_provider_auth(runtime_config)
+    client = create_openai_client(auth=auth, base_url=runtime.base_url)
 
     response = client.responses.parse(
-        model=config.model,
+        model=runtime.model,
         input=[
             {
                 "role": "user",
@@ -380,15 +943,15 @@ def extract_with_openai_like(
 
     plan = normalize_plan(parsed, screen_name=config.screen_name, image_meta=image_meta)
     report = {
-        "provider": provider_name,
-        "model": config.model,
+        "provider": runtime.provider,
+        "model": runtime.model,
         "responseId": getattr(response, "id", None),
         "usage": getattr(response, "usage", None),
         "image": image_meta,
         "screenName": config.screen_name,
         "projectHints": config.project_hints,
-        "baseUrl": base_url,
-        "apiKeyEnv": config.api_key_env,
+        "baseUrl": runtime.base_url,
+        "apiKeyEnv": runtime.api_key_env,
         "authMode": auth.auth_mode,
         "tokenSource": auth.token_source,
     }
@@ -553,23 +1116,19 @@ def extract_plan(
     image_path: Path,
     config: ProviderConfig,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
-    resolved_provider = resolve_provider(config)
+    runtime = resolve_runtime_provider_config(config)
+    resolved_provider = runtime.provider
 
-    if resolved_provider == "openai":
+    if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
+        if resolved_provider == "openai_compatible" and not runtime.base_url:
+            _die(
+                "`provider=openai_compatible`를 선택했지만 `provider_base_url`이 비어 있습니다. "
+                "커스텀 OpenAI-compatible endpoint를 쓰려면 base URL을 함께 지정하세요."
+            )
         plan, report = extract_with_openai_like(
             image_path=image_path,
             config=config,
-            provider_name="openai",
-            base_url=None,
-        )
-    elif resolved_provider == "openai_compatible":
-        if not config.base_url:
-            _die("--provider-base-url is required for --provider openai_compatible.")
-        plan, report = extract_with_openai_like(
-            image_path=image_path,
-            config=config,
-            provider_name="openai_compatible",
-            base_url=config.base_url,
+            runtime=runtime,
         )
     elif resolved_provider == "local_heuristic":
         plan, report = extract_with_local_heuristic(
@@ -580,7 +1139,7 @@ def extract_plan(
         _die(f"Unsupported provider: {resolved_provider}")
 
     report["resolvedProvider"] = resolved_provider
-    report["requestedProvider"] = config.provider
+    report["requestedProvider"] = runtime.requested_provider
     return plan, report
 
 
@@ -598,25 +1157,30 @@ def dry_run_payload(
     config: ProviderConfig,
 ) -> dict[str, Any]:
     _, image_meta = prepare_analysis_image(image_path, config.max_image_dim)
-    resolved_provider = resolve_provider(config)
+    runtime = resolve_runtime_provider_config(config)
+    inspection = inspect_provider_setup(config)
+    resolved_provider = runtime.provider
     preview = {
         "mode": "dry-run",
-        "requestedProvider": config.provider,
-        "resolvedProvider": resolved_provider,
-        "model": config.model,
+        "requestedProvider": inspection.requested_provider,
+        "resolvedProvider": inspection.resolved_provider,
+        "model": runtime.model,
         "screenName": config.screen_name,
         "imagePath": str(image_path),
         "image": image_meta,
         "detail": config.detail,
         "projectHints": config.project_hints,
-        "providerBaseUrl": config.base_url,
-        "providerApiKeyEnv": config.api_key_env,
+        "providerBaseUrl": inspection.provider_base_url,
+        "providerApiKeyEnv": inspection.provider_api_key_env,
+        "authMode": inspection.auth_mode,
+        "tokenSource": inspection.token_source,
+        "recommendedChoice": inspection.recommended_choice,
+        "missingSettings": inspection.missing_settings,
+        "nextActions": inspection.next_actions,
+        "setupSummary": inspection.summary,
     }
 
-    if resolved_provider in {"openai", "openai_compatible"}:
-        auth = resolve_provider_auth(config, require_token=False)
-        preview["authMode"] = auth.auth_mode
-        preview["tokenSource"] = auth.token_source
+    if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
         preview["instructionsPreview"] = SYSTEM_PROMPT
         preview["userPromptPreview"] = build_user_prompt(
             screen_name=config.screen_name,
@@ -645,13 +1209,14 @@ def main() -> int:
     parser.add_argument("--report", type=Path, help="Path to write the extraction report JSON")
     parser.add_argument("--screen-name", help="Screen name override. Defaults to the image file stem.")
     parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default=DEFAULT_PROVIDER, help=f"Extraction provider. Default: {DEFAULT_PROVIDER}")
-    parser.add_argument("--provider-base-url", help="Base URL for openai_compatible providers.")
-    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key. Used for backward-compatible api_key auth.")
+    parser.add_argument("--provider-base-url", help="Base URL override for openai_compatible, gemini/antigravity, or claude/claude_code providers.")
+    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key. Defaults are OPENAI_API_KEY/openai, GEMINI_API_KEY or GOOGLE_API_KEY/gemini, ANTHROPIC_API_KEY/claude.")
     parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed providers. Defaults to api_key unless any OAuth input is provided.")
     parser.add_argument("--oauth-token-env", help="Environment variable that stores an OAuth bearer token.")
     parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
+    parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file. Defaults to $CODEX_HOME/auth.json or ~/.codex/auth.json when available.")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL} (provider presets override this when you keep the default value).")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
     parser.add_argument("--hint", action="append", default=[], help="Optional project or UI hints to include in the extraction context.")
@@ -676,6 +1241,7 @@ def main() -> int:
         oauth_token_env=args.oauth_token_env,
         oauth_token_file=args.oauth_token_file,
         oauth_token_command=args.oauth_token_command,
+        codex_auth_file=args.codex_auth_file,
         base_url=args.provider_base_url,
     )
 

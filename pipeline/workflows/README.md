@@ -41,11 +41,24 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
 
 provider 메모:
 
-- `--provider auto`: 기본적으로 키가 있으면 API provider, 없으면 `local_heuristic`
-- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`)을 주면 `--provider-api-key-env`보다 OAuth 설정이 우선된다
+- `--provider auto`: 기본적으로 OpenAI 키/Codex OAuth가 있으면 `openai`, 없으면 Google API key -> `gemini`, 없으면 Google OAuth / gcloud access token -> `antigravity`, 없으면 `ANTHROPIC_API_KEY` -> `claude`, 없으면 `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` -> `claude_code`, 셋 다 없으면 `local_heuristic`
+- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`)을 주면 `--provider-api-key-env`보다 OAuth 설정이 우선된다
+- 명시적인 OAuth 입력이 없어도 `$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`에 Codex 로그인 토큰이 있으면 `--provider auto`가 OpenAI provider를 계속 사용할 수 있다
 - `--provider local_heuristic`: 완전 로컬 fallback
+- `--provider gemini`: Google OpenAI-compatible endpoint preset (`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`)
+- `--provider antigravity`: Google OpenAI-compatible endpoint + OAuth preset (`GOOGLE_OAUTH_ACCESS_TOKEN` 또는 `gcloud auth application-default print-access-token`)
+- `--provider claude`: Anthropic OpenAI-compatible endpoint preset (`ANTHROPIC_API_KEY`)
+- `--provider claude_code`: Anthropic OpenAI-compatible endpoint + Claude Code bearer preset (`ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json`)
 - `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`: 다른 OpenAI-compatible 서비스로 확장
-- workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`를 그대로 전달한다
+- workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`를 그대로 전달한다
+
+MCP tool preset 메모:
+
+- 처음 설정할 때는 CLI 저수준 플래그를 MCP에서 그대로 노출하기보다 `connection_preset`을 먼저 고르는 것을 권장한다
+- 권장 시작값은 `connection_preset=recommended_auto`
+- Codex OAuth는 `codex_oauth`, OpenAI 키는 `openai_api_key`, Gemini 키는 `gemini_api_key`, Google OAuth는 `google_oauth`, Claude API key는 `claude_api_key`, Claude Code는 `claude_code`, 완전 로컬은 `offline_local`
+- `custom_openai_compatible`만 `provider_base_url` 같은 고급 설정을 추가로 채우면 된다
+- `connection_preset`과 저수준 필드를 함께 넘기면 preset이 우선하지만, 고급 커스텀 입력은 계속 지원한다
 
 적용 후 screenshot이 생기면 [pipeline/verification/README.md](../verification/README.md)의 repair loop를 이어서 돌릴 수 있다.
 

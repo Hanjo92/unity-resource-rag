@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "unity-resource-rag": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "pipeline.mcp"
+      ],
+      "cwd": "/absolute/path/to/unity-resource-rag",
+      "env": {
+        "GEMINI_API_KEY": "your-gemini-api-key"
+      }
+    }
+  }
+}

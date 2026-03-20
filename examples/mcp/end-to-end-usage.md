@@ -1,6 +1,21 @@
 # MCP Sidecar Usage
 
-## 1. Build The Catalog
+## 1. Inspect Provider Setup
+
+실제 워크플로우를 실행하기 전에 연결 설정이 어떻게 해석되는지 먼저 확인한다.
+
+```json
+{
+  "tool": "unity_rag.inspect_provider_setup",
+  "arguments": {
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+응답에서 `missingSettings`가 비어 있고 `nextActions`가 실행 가능 상태를 안내하면 다음 단계로 넘어간다.
+
+## 2. Build The Catalog
 
 Run the Unity-side export tool first so the sidecar has real project assets to bind against.
 
@@ -9,7 +24,7 @@ python3 pipeline/indexer/inspect_catalog.py \
   Library/ResourceRag/resource_catalog.jsonl
 ```
 
-## 2. Extract And Bind
+## 3. Extract And Bind
 
 From a reference image:
 
@@ -21,6 +36,8 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --hint "mobile reward popup"
 ```
 
+Codex에서 실행 중이고 같은 사용자 계정에 `~/.codex/auth.json`이 있다면 위 명령은 별도의 `OPENAI_API_KEY` 없이도 OpenAI provider 인증을 재사용한다.
+
 Outputs:
 
 - `01-reference-layout.json`
@@ -29,7 +46,7 @@ Outputs:
 - `03-binding-report.json`
 - `04-mcp-handoff.json`
 
-## 3. Execute In Unity MCP
+## 4. Execute In Unity MCP
 
 Use the resolved blueprint with `apply_ui_blueprint`.
 
@@ -73,7 +90,7 @@ Then capture a screenshot:
 }
 ```
 
-## 4. Repair If Needed
+## 5. Repair If Needed
 
 Compare the screenshot against the reference image:
 
