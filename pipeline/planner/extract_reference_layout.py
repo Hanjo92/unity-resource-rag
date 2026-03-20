@@ -9,16 +9,22 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 import numpy as np
 from PIL import Image
 from pydantic import ValidationError
 
 if __package__ in (None, ""):
+    planner_dir = Path(__file__).resolve().parent
+    if str(planner_dir) not in sys.path:
+        sys.path.insert(0, str(planner_dir))
     from reference_layout_models import ComponentSpec, ReferenceLayoutPlan
 else:
     from .reference_layout_models import ComponentSpec, ReferenceLayoutPlan
@@ -28,7 +34,10 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 DEFAULT_DETAIL = "high"
 DEFAULT_MAX_IMAGE_DIM = 1600
 DEFAULT_PROVIDER = "auto"
-SUPPORTED_PROVIDERS = ("auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic")
+DEFAULT_GATEWAY_URL_ENV = "UNITY_RESOURCE_RAG_GATEWAY_URL"
+DEFAULT_GATEWAY_AUTH_TOKEN_ENV = "UNITY_RESOURCE_RAG_GATEWAY_TOKEN"
+DEFAULT_GATEWAY_TIMEOUT_MS = 30000
+SUPPORTED_PROVIDERS = ("auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "gateway", "local_heuristic")
 DEFAULT_CODEX_AUTH_FILE = "auth.json"
 DEFAULT_CLAUDE_CODE_AUTH_FILE = ".credentials.json"
 DEFAULT_GOOGLE_OAUTH_COMMAND = "gcloud auth application-default print-access-token"
@@ -144,6 +153,9 @@ class ProviderConfig:
     oauth_token_command: str | None
     codex_auth_file: str | None
     base_url: str | None
+    gateway_url: str | None
+    gateway_auth_token_env: str
+    gateway_timeout_ms: int
 
 
 @dataclass
@@ -320,6 +332,10 @@ def _provider_defaults(provider: str) -> dict[str, str | None]:
     return PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
 
 
+def _supports_codex_oauth_reuse(provider: str) -> bool:
+    return provider in {"auto", "openai"}
+
+
 def _default_claude_code_auth_file() -> Path:
     claude_config_dir = os.getenv("CLAUDE_CONFIG_DIR")
     base_dir = Path(claude_config_dir).expanduser() if claude_config_dir else Path.home() / ".claude"
@@ -352,6 +368,18 @@ def resolve_runtime_provider_config(config: ProviderConfig) -> ResolvedProviderC
     requested_provider = config.provider
 
     if requested_provider == "auto":
+        if config.gateway_url:
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="gateway",
+                api_key_env=config.api_key_env,
+                base_url=None,
+                model=config.model,
+                auth_mode=None,
+                oauth_token_env=None,
+                oauth_token_file=None,
+                oauth_token_command=None,
+            )
         if has_provider_auth(config):
             return ResolvedProviderConfig(
                 requested_provider=requested_provider,
@@ -441,6 +469,19 @@ def resolve_runtime_provider_config(config: ProviderConfig) -> ResolvedProviderC
             oauth_token_command=config.oauth_token_command,
         )
 
+    if requested_provider == "gateway":
+        return ResolvedProviderConfig(
+            requested_provider=requested_provider,
+            provider="gateway",
+            api_key_env=config.api_key_env,
+            base_url=None,
+            model=config.model,
+            auth_mode=None,
+            oauth_token_env=None,
+            oauth_token_file=None,
+            oauth_token_command=None,
+        )
+
     defaults = _provider_defaults(requested_provider)
     base_url = config.base_url if config.base_url else defaults["base_url"]
     api_key_env = config.api_key_env
@@ -472,13 +513,18 @@ def resolve_runtime_provider_config(config: ProviderConfig) -> ResolvedProviderC
 def _configured_auth_mode(config: ProviderConfig) -> str:
     if config.auth_mode and config.auth_mode not in {"api_key", "oauth_token"}:
         _die(f"Unsupported auth mode: {config.auth_mode}")
-    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command or config.codex_auth_file:
+    if (
+        config.oauth_token_env
+        or config.oauth_token_file
+        or config.oauth_token_command
+        or (config.codex_auth_file and _supports_codex_oauth_reuse(config.provider))
+    ):
         return "oauth_token"
     if config.auth_mode:
         return config.auth_mode
     if os.getenv(config.api_key_env):
         return "api_key"
-    if config.provider in {"auto", "openai", "openai_compatible"} and _has_readable_codex_auth_file(None):
+    if _supports_codex_oauth_reuse(config.provider) and _has_readable_codex_auth_file(None):
         return "oauth_token"
     return "api_key"
 
@@ -514,8 +560,9 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
         ("env", config.oauth_token_env),
         ("file", config.oauth_token_file),
         ("command", config.oauth_token_command),
-        ("codex_file", config.codex_auth_file),
     ]
+    if _supports_codex_oauth_reuse(config.provider):
+        sources.append(("codex_file", config.codex_auth_file))
     configured = [(name, value) for name, value in sources if value]
     if configured:
         return configured[0]
@@ -528,15 +575,21 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
     if config.provider == "antigravity" and _has_command_token(DEFAULT_GOOGLE_OAUTH_COMMAND):
         return ("command", DEFAULT_GOOGLE_OAUTH_COMMAND)
 
-    if config.provider in {"auto", "openai", "openai_compatible"}:
+    if _supports_codex_oauth_reuse(config.provider):
         default_codex_auth_file = _default_codex_auth_file()
         if _has_readable_codex_auth_file(str(default_codex_auth_file)):
             return ("codex_file", str(default_codex_auth_file))
 
-    if config.provider in {"openai", "openai_compatible", "auto"}:
+    if config.provider in {"openai", "auto"}:
         _die(
             f"`provider={config.provider}`를 선택했지만 API key/Codex OAuth를 찾지 못했습니다. "
             "`provider=auto`로 바꾸거나 Codex 로그인 파일 경로를 지정하세요."
+        )
+    if config.provider == "openai_compatible":
+        _die(
+            "`provider=openai_compatible`는 명시적인 인증 정보가 필요합니다. "
+            "`provider_api_key_env`를 설정하거나 `oauth_token_env`, `oauth_token_file`, `oauth_token_command` 중 하나를 지정하세요. "
+            "Codex OAuth 자동 재사용은 지원하지 않습니다."
         )
     _die(
         f"`provider={config.provider}`는 OAuth 토큰이 필요하지만 사용할 토큰 소스를 찾지 못했습니다. "
@@ -546,6 +599,8 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
 
 def _recommended_choice_for_runtime(runtime: ResolvedProviderConfig) -> str:
     if runtime.requested_provider == "auto":
+        if runtime.provider == "gateway":
+            return "provider=auto + gateway_url"
         return "connection_preset=recommended_auto"
     if runtime.provider == "openai" and runtime.auth_mode == "oauth_token":
         return "connection_preset=codex_oauth"
@@ -559,6 +614,10 @@ def _recommended_choice_for_runtime(runtime: ResolvedProviderConfig) -> str:
         return "connection_preset=claude_api_key"
     if runtime.provider == "claude_code":
         return "connection_preset=claude_code"
+    if runtime.provider == "openai_compatible" and runtime.auth_mode == "api_key":
+        return "connection_preset=custom_openai_compatible"
+    if runtime.provider == "gateway":
+        return "provider=gateway"
     if runtime.provider == "local_heuristic":
         return "connection_preset=offline_local"
     return f"provider={runtime.provider}"
@@ -570,6 +629,11 @@ def _missing_settings_for_runtime(
     config: ProviderConfig,
 ) -> list[str]:
     missing: list[str] = []
+
+    if runtime.provider == "gateway":
+        if not config.gateway_url:
+            missing.append("`provider=gateway`에는 `gateway_url`이 필요합니다.")
+        return missing
 
     if runtime.provider == "openai_compatible" and not runtime.base_url:
         missing.append("`provider=openai_compatible`에는 `provider_base_url`이 필요합니다.")
@@ -622,7 +686,7 @@ def _next_actions_for_runtime(
             return ["현재 설정으로 로컬 heuristic 점검을 진행할 수 있습니다."]
         return ["현재 설정으로 실제 workflow 실행을 시작해도 됩니다."]
 
-    if runtime.provider in {"openai", "openai_compatible"}:
+    if runtime.provider == "openai":
         actions = [
             "`provider=auto` 또는 `connection_preset=recommended_auto`로 바꿔 자동 감지를 사용합니다.",
         ]
@@ -630,8 +694,15 @@ def _next_actions_for_runtime(
             actions.append("Codex를 이미 로그인했다면 `codex_auth_file`을 지정하거나 기본 경로(`$CODEX_HOME/auth.json`, `~/.codex/auth.json`)를 확인합니다.")
         else:
             actions.append(f"`{runtime.api_key_env}`를 설정하거나 `connection_preset=codex_oauth`를 사용합니다.")
-        if runtime.provider == "openai_compatible":
-            actions.append("커스텀 endpoint를 쓸 때는 `provider_base_url`을 함께 지정합니다.")
+        return actions
+
+    if runtime.provider == "openai_compatible":
+        actions = [
+            "`connection_preset=custom_openai_compatible`를 사용하고 `provider_base_url`을 지정합니다.",
+            f"해당 서비스 전용 API key를 `{runtime.api_key_env}`에 설정합니다.",
+        ]
+        if auth and auth.auth_mode == "oauth_token":
+            actions.append("OAuth를 쓰려면 `oauth_token_env`, `oauth_token_file`, `oauth_token_command` 중 하나를 명시적으로 지정합니다.")
         return actions
 
     if runtime.provider == "gemini":
@@ -658,6 +729,12 @@ def _next_actions_for_runtime(
             "API key 기반 연결이 더 쉽다면 `connection_preset=claude_api_key`를 사용합니다.",
         ]
 
+    if runtime.provider == "gateway":
+        return [
+            "`--gateway-url` 또는 `UNITY_RESOURCE_RAG_GATEWAY_URL`를 설정합니다.",
+            "gateway가 bearer token을 요구하면 `UNITY_RESOURCE_RAG_GATEWAY_TOKEN` 또는 `--gateway-auth-token-env`를 함께 설정합니다.",
+        ]
+
     if runtime.provider == "local_heuristic":
         return ["온라인 provider가 필요 없다면 그대로 진행하고, 실제 모델 호출이 필요하면 `provider=auto`로 바꿉니다."]
 
@@ -669,7 +746,7 @@ def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
     auth: ProviderAuth | None = None
     auth_error: str | None = None
 
-    if runtime.provider != "local_heuristic":
+    if runtime.provider not in {"local_heuristic", "gateway"}:
         runtime_config = ProviderConfig(
             provider=runtime.provider,
             screen_name=config.screen_name,
@@ -684,6 +761,9 @@ def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
             oauth_token_command=runtime.oauth_token_command,
             codex_auth_file=config.codex_auth_file,
             base_url=runtime.base_url,
+            gateway_url=config.gateway_url,
+            gateway_auth_token_env=config.gateway_auth_token_env,
+            gateway_timeout_ms=config.gateway_timeout_ms,
         )
         try:
             auth = resolve_provider_auth(runtime_config, require_token=False)
@@ -698,7 +778,13 @@ def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
 
     token_source = auth.token_source if auth else None
     token_source_detail = None
-    if token_source == "env":
+    resolved_auth_mode = auth.auth_mode if auth else runtime.auth_mode
+    if runtime.provider == "gateway":
+        token_source_detail = config.gateway_auth_token_env
+        if os.getenv(config.gateway_auth_token_env):
+            token_source = "env"
+            resolved_auth_mode = "bearer_token"
+    elif token_source == "env":
         token_source_detail = runtime.oauth_token_env
     elif token_source == "file":
         token_source_detail = runtime.oauth_token_file
@@ -721,7 +807,7 @@ def inspect_provider_setup(config: ProviderConfig) -> ProviderSetupInspection:
     return ProviderSetupInspection(
         requested_provider=runtime.requested_provider,
         resolved_provider=runtime.provider,
-        auth_mode=auth.auth_mode if auth else runtime.auth_mode,
+        auth_mode=resolved_auth_mode,
         provider_base_url=runtime.base_url,
         provider_api_key_env=runtime.api_key_env,
         token_source=token_source,
@@ -815,10 +901,15 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
     if auth_mode == "api_key":
         token = os.getenv(config.api_key_env)
         if require_token and not token:
-            if config.provider in {"openai", "openai_compatible"}:
+            if config.provider == "openai":
                 _die(
                     f"`provider={config.provider}`를 선택했지만 API key 또는 Codex OAuth를 찾지 못했습니다. "
                     f"`provider=auto`로 바꾸거나 `{config.api_key_env}`를 설정하고, Codex 로그인을 재사용하려면 `auth_mode=oauth_token` 또는 `codex_auth_file`을 지정하세요."
+                )
+            if config.provider == "openai_compatible":
+                _die(
+                    f"`provider=openai_compatible`를 선택했지만 필요한 API key를 찾지 못했습니다. "
+                    f"환경 변수 `{config.api_key_env}`를 설정하거나, OAuth를 쓰려면 `auth_mode=oauth_token`과 `oauth_token_env`/`oauth_token_file`/`oauth_token_command`를 명시적으로 지정하세요."
                 )
             _die(
                 f"`provider={config.provider}`를 선택했지만 필요한 API key를 찾지 못했습니다. "
@@ -871,6 +962,15 @@ def resolve_provider(config: ProviderConfig) -> str:
     return resolve_runtime_provider_config(config).provider
 
 
+def _strip_trailing_slash(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return stripped.rstrip("/")
+
+
 def create_openai_client(*, auth: ProviderAuth, base_url: str | None):
     try:
         from openai import OpenAI
@@ -881,6 +981,116 @@ def create_openai_client(*, auth: ProviderAuth, base_url: str | None):
         _die("Resolved provider auth did not return a bearer token.")
 
     return OpenAI(api_key=auth.bearer_token, base_url=base_url)
+
+
+def build_gateway_request_payload(
+    *,
+    image_path: Path,
+    config: ProviderConfig,
+) -> tuple[dict[str, Any], dict[str, int | str]]:
+    data_url, image_meta = encode_image_data_url(image_path, config.max_image_dim)
+    payload = {
+        "capability": "vision_layout_extraction",
+        "providerPreference": [
+            "gateway:auto",
+        ],
+        "input": {
+            "screenName": config.screen_name,
+            "imageDataUrl": data_url,
+            "projectHints": config.project_hints,
+            "image": image_meta,
+        },
+        "outputSchema": "reference_layout_plan_v1",
+        "options": {
+            "detail": config.detail,
+            "timeoutMs": config.gateway_timeout_ms,
+            "modelHint": config.model,
+        },
+    }
+    return payload, image_meta
+
+
+def extract_with_gateway(
+    *,
+    image_path: Path,
+    config: ProviderConfig,
+) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
+    gateway_url = _strip_trailing_slash(config.gateway_url)
+    if not gateway_url:
+        _die(
+            "Gateway provider requires a gateway URL. Set --gateway-url or "
+            f"{DEFAULT_GATEWAY_URL_ENV}."
+        )
+
+    payload, image_meta = build_gateway_request_payload(
+        image_path=image_path,
+        config=config,
+    )
+    request_url = f"{gateway_url}/v1/capabilities/run"
+    request_body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    auth_token = os.getenv(config.gateway_auth_token_env)
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+
+    request = urllib_request.Request(
+        request_url,
+        data=request_body,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(request, timeout=max(config.gateway_timeout_ms / 1000.0, 1.0)) as response:
+            raw = response.read().decode("utf-8")
+            response_payload = json.loads(raw)
+    except urllib_error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        _die(
+            f"Gateway request failed with HTTP {exc.code}: {error_body or exc.reason}"
+        )
+    except urllib_error.URLError as exc:
+        _die(f"Gateway request failed: {exc.reason}")
+    except json.JSONDecodeError as exc:
+        _die(f"Gateway returned invalid JSON: {exc}")
+
+    if response_payload.get("status") != "ok":
+        code = response_payload.get("code", "unknown_error")
+        message = response_payload.get("message", "Gateway request failed.")
+        _die(f"Gateway returned {code}: {message}")
+
+    output = response_payload.get("output")
+    if not isinstance(output, dict):
+        _die("Gateway response did not include an object `output`.")
+
+    plan = normalize_plan(
+        ReferenceLayoutPlan.model_validate(output),
+        screen_name=config.screen_name,
+        image_meta=image_meta,
+    )
+    report = {
+        "provider": "gateway",
+        "screenName": config.screen_name,
+        "image": image_meta,
+        "projectHints": config.project_hints,
+        "gateway": {
+            "url": gateway_url,
+            "authTokenEnv": config.gateway_auth_token_env,
+            "capability": payload["capability"],
+            "outputSchema": payload["outputSchema"],
+            "requestPath": "/v1/capabilities/run",
+        },
+        "adapterId": response_payload.get("adapterId"),
+        "authMode": response_payload.get("authMode"),
+        "providerFamily": response_payload.get("providerFamily"),
+        "usage": response_payload.get("usage"),
+        "trace": response_payload.get("trace"),
+    }
+    return plan, report
 
 
 def extract_with_openai_like(
@@ -904,6 +1114,9 @@ def extract_with_openai_like(
         oauth_token_command=runtime.oauth_token_command,
         codex_auth_file=config.codex_auth_file,
         base_url=runtime.base_url,
+        gateway_url=config.gateway_url,
+        gateway_auth_token_env=config.gateway_auth_token_env,
+        gateway_timeout_ms=config.gateway_timeout_ms,
     )
     auth = resolve_provider_auth(runtime_config)
     client = create_openai_client(auth=auth, base_url=runtime.base_url)
@@ -1130,6 +1343,11 @@ def extract_plan(
             config=config,
             runtime=runtime,
         )
+    elif resolved_provider == "gateway":
+        plan, report = extract_with_gateway(
+            image_path=image_path,
+            config=config,
+        )
     elif resolved_provider == "local_heuristic":
         plan, report = extract_with_local_heuristic(
             image_path=image_path,
@@ -1178,6 +1396,9 @@ def dry_run_payload(
         "missingSettings": inspection.missing_settings,
         "nextActions": inspection.next_actions,
         "setupSummary": inspection.summary,
+        "gatewayUrl": config.gateway_url,
+        "gatewayAuthTokenEnv": config.gateway_auth_token_env,
+        "gatewayTimeoutMs": config.gateway_timeout_ms,
     }
 
     if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
@@ -1187,6 +1408,20 @@ def dry_run_payload(
             image_meta=image_meta,
             project_hints=config.project_hints,
         )
+    elif resolved_provider == "gateway":
+        request_payload, _ = build_gateway_request_payload(
+            image_path=image_path,
+            config=config,
+        )
+        preview["gatewayRequestPreview"] = {
+            "url": f"{_strip_trailing_slash(config.gateway_url) or '<missing-gateway-url>'}/v1/capabilities/run",
+            "headers": {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer from {config.gateway_auth_token_env}" if os.getenv(config.gateway_auth_token_env) else None,
+            },
+            "payload": request_payload,
+        }
     else:
         preview["heuristicPreview"] = {
             "description": "Detect a dominant non-background foreground box and convert it into a generic popup/panel shell plan.",
@@ -1216,6 +1451,9 @@ def main() -> int:
     parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
     parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file. Defaults to $CODEX_HOME/auth.json or ~/.codex/auth.json when available.")
+    parser.add_argument("--gateway-url", help=f"Gateway base URL. Defaults to {DEFAULT_GATEWAY_URL_ENV} when set.")
+    parser.add_argument("--gateway-auth-token-env", default=DEFAULT_GATEWAY_AUTH_TOKEN_ENV, help="Environment variable that stores the gateway bearer token when OAuth or token auth is required.")
+    parser.add_argument("--gateway-timeout-ms", type=int, default=DEFAULT_GATEWAY_TIMEOUT_MS, help="Gateway request timeout in milliseconds.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL} (provider presets override this when you keep the default value).")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
@@ -1243,6 +1481,9 @@ def main() -> int:
         oauth_token_command=args.oauth_token_command,
         codex_auth_file=args.codex_auth_file,
         base_url=args.provider_base_url,
+        gateway_url=_strip_trailing_slash(args.gateway_url or os.getenv(DEFAULT_GATEWAY_URL_ENV)),
+        gateway_auth_token_env=args.gateway_auth_token_env,
+        gateway_timeout_ms=args.gateway_timeout_ms,
     )
 
     output_path = args.output or default_output_path(image_path)

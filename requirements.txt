@@ -2,3 +2,5 @@ numpy>=1.26
 Pillow>=10.0
 pydantic>=2.7
 openai>=1.30
+google-auth>=2.35
+google-auth-oauthlib>=1.2

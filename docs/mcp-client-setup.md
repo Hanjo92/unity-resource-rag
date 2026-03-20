@@ -202,7 +202,7 @@ MCP tool을 처음 붙일 때는 저수준 `provider`, `auth_mode`, 각종 env/f
 - `google_oauth`: `GOOGLE_OAUTH_ACCESS_TOKEN` 또는 `gcloud` access token 기반 Google OAuth 연결
 - `claude_api_key`: `ANTHROPIC_API_KEY` 기반 Claude 연결
 - `claude_code`: `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` 기반 Claude Code 연결
-- `custom_openai_compatible`: 별도 OpenAI-compatible endpoint 연결. 이 경우 `provider_base_url` 같은 고급 설정을 함께 채운다
+- `custom_openai_compatible`: 별도 OpenAI-compatible endpoint 연결. 이 경우 `provider_base_url`과 해당 서비스의 API key env를 함께 채운다. Codex OAuth 자동 재사용은 적용되지 않는다
 - `offline_local`: 네트워크 없이 `local_heuristic`만 사용
 
 기존 `provider`, `auth_mode`, `provider_api_key_env`, `oauth_token_env`, `oauth_token_file`, `oauth_token_command`, `codex_auth_file`, `provider_base_url`도 계속 지원하지만, MCP tool 인자에서 `connection_preset`을 같이 넘기면 preset이 우선 적용된다.

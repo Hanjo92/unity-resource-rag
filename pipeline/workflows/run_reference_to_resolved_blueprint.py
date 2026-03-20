@@ -104,7 +104,7 @@ def main() -> int:
     parser.add_argument("--vector-index", type=Path, help="Optional existing resource_vector_index.json path.")
     parser.add_argument("--output-dir", type=Path, help="Directory for workflow artifacts.")
     parser.add_argument("--screen-name", help="Screen name override for extraction.")
-    parser.add_argument("--provider", default="auto", help="Extraction provider: auto, openai, gemini, antigravity, claude, claude_code, openai_compatible, or local_heuristic.")
+    parser.add_argument("--provider", default="auto", help="Extraction provider: auto, openai, gemini, antigravity, claude, claude_code, openai_compatible, gateway, or local_heuristic.")
     parser.add_argument("--provider-base-url", help="Base URL override for openai_compatible, gemini/antigravity, or claude/claude_code extraction providers.")
     parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable name for the extraction provider API key. Provider presets default to OPENAI_API_KEY/openai, GEMINI_API_KEY or GOOGLE_API_KEY/gemini, ANTHROPIC_API_KEY/claude.")
     parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed extraction providers.")
@@ -112,6 +112,9 @@ def main() -> int:
     parser.add_argument("--oauth-token-file", help="File path containing an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout.")
     parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file.")
+    parser.add_argument("--gateway-url", help="Gateway base URL for --provider gateway or auto fallback.")
+    parser.add_argument("--gateway-auth-token-env", default="UNITY_RESOURCE_RAG_GATEWAY_TOKEN", help="Environment variable name for the gateway bearer token.")
+    parser.add_argument("--gateway-timeout-ms", type=int, default=30000, help="Gateway request timeout in milliseconds.")
     parser.add_argument("--model", default="gpt-4.1-mini", help="Extraction model.")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default="high", help="Image detail hint for extraction.")
     parser.add_argument("--max-image-dim", type=int, default=1600, help="Maximum width/height sent to extraction.")
@@ -183,6 +186,12 @@ def main() -> int:
             command.extend(["--oauth-token-command", args.oauth_token_command])
         if args.codex_auth_file:
             command.extend(["--codex-auth-file", args.codex_auth_file])
+        if args.gateway_url:
+            command.extend(["--gateway-url", args.gateway_url])
+        if args.gateway_auth_token_env:
+            command.extend(["--gateway-auth-token-env", args.gateway_auth_token_env])
+        if args.gateway_timeout_ms:
+            command.extend(["--gateway-timeout-ms", str(args.gateway_timeout_ms)])
         for hint in args.hint:
             command.extend(["--hint", hint])
         if args.safe_area_component_type:

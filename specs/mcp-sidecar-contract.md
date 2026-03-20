@@ -26,6 +26,7 @@ Input:
 {
   "image": "/absolute/path/to/reference.png",
   "provider": "auto",
+  "gatewayUrl": "http://127.0.0.1:8080",
   "screenName": "RewardPopup",
   "hint": [
     "mobile reward popup",
@@ -42,7 +43,7 @@ Output:
   "report": "/.../RewardPopup.extract-report.json",
   "screenName": "RewardPopup",
   "regionCount": 3,
-  "resolvedProvider": "local_heuristic"
+  "resolvedProvider": "gateway"
 }
 ```
 

@@ -34,13 +34,14 @@ PIPELINE_ROOT = REPO_ROOT / "pipeline"
 
 PROVIDER_DESCRIPTION = (
     "추출 provider 선택. "
-    "`auto`: 권장값, 감지 가능한 인증을 자동 선택. "
+    "`auto`: 권장값, gateway URL이나 감지 가능한 인증을 자동 선택. "
     "`openai`: OpenAI API key 또는 Codex OAuth 사용. "
     "`gemini`: Google API key 사용. "
     "`antigravity`: Google OAuth/gcloud 토큰 사용. "
     "`claude`: Anthropic API key 사용. "
     "`claude_code`: Claude Code credential 사용. "
     "`openai_compatible`: 사용자 지정 OpenAI-compatible endpoint 사용. "
+    "`gateway`: team/provider gateway 사용. "
     "`local_heuristic`: 완전 로컬 fallback."
 )
 
@@ -60,7 +61,7 @@ CONNECTION_PRESET_DESCRIPTION = (
     "프리셋이 지정되면 같은 범주의 저수준 provider/auth 입력보다 프리셋이 우선한다."
 )
 
-PROVIDER_ENUM = ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic"]
+PROVIDER_ENUM = ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "gateway", "local_heuristic"]
 CONNECTION_PRESET_ENUM = [
     "recommended_auto",
     "codex_oauth",
@@ -83,6 +84,16 @@ CONNECTION_PRESET_DEFAULTS: dict[str, dict[str, str]] = {
     "claude_code": {"provider": "claude_code", "auth_mode": "oauth_token"},
     "custom_openai_compatible": {"provider": "openai_compatible", "auth_mode": "api_key"},
     "offline_local": {"provider": "local_heuristic"},
+}
+CONNECTION_PRESET_CLEAR_FIELDS: dict[str, tuple[str, ...]] = {
+    "codex_oauth": ("oauth_token_env", "oauth_token_file", "oauth_token_command"),
+    "openai_api_key": ("oauth_token_env", "oauth_token_file", "oauth_token_command", "codex_auth_file"),
+    "gemini_api_key": ("oauth_token_env", "oauth_token_file", "oauth_token_command", "codex_auth_file"),
+    "google_oauth": ("codex_auth_file",),
+    "claude_api_key": ("oauth_token_env", "oauth_token_file", "oauth_token_command", "codex_auth_file"),
+    "claude_code": ("codex_auth_file",),
+    "custom_openai_compatible": ("oauth_token_env", "oauth_token_file", "oauth_token_command", "codex_auth_file"),
+    "offline_local": ("auth_mode", "oauth_token_env", "oauth_token_file", "oauth_token_command", "codex_auth_file"),
 }
 
 
@@ -169,6 +180,8 @@ def _apply_connection_preset(args: dict[str, Any]) -> dict[str, Any]:
         raise ToolExecutionError(f"Unsupported connection_preset: {preset}.")
 
     normalized.update(defaults)
+    for field in CONNECTION_PRESET_CLEAR_FIELDS.get(str(preset), ()):
+        normalized.pop(field, None)
     return normalized
 
 
@@ -189,6 +202,9 @@ def _build_extract_reference_layout_schema() -> dict[str, Any]:
             "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
             "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
             "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -221,6 +237,9 @@ def _build_run_reference_to_resolved_blueprint_schema() -> dict[str, Any]:
             "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
             "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
             "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -278,6 +297,9 @@ def _build_inspect_provider_setup_schema() -> dict[str, Any]:
             "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
             "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
             "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
         },
         "additionalProperties": False,
     }
@@ -347,6 +369,9 @@ def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
         ("oauth_token_file", "--oauth-token-file"),
         ("oauth_token_command", "--oauth-token-command"),
         ("codex_auth_file", "--codex-auth-file"),
+        ("gateway_url", "--gateway-url"),
+        ("gateway_auth_token_env", "--gateway-auth-token-env"),
+        ("gateway_timeout_ms", "--gateway-timeout-ms"),
         ("model", "--model"),
         ("detail", "--detail"),
         ("max_image_dim", "--max-image-dim"),
@@ -384,12 +409,17 @@ def inspect_provider_setup(args: dict[str, Any]) -> dict[str, Any]:
         oauth_token_command=str(args["oauth_token_command"]) if args.get("oauth_token_command") else None,
         codex_auth_file=str(args["codex_auth_file"]) if args.get("codex_auth_file") else None,
         base_url=str(args["provider_base_url"]) if args.get("provider_base_url") else None,
+        gateway_url=str(args["gateway_url"]) if args.get("gateway_url") else None,
+        gateway_auth_token_env=str(args.get("gateway_auth_token_env") or "UNITY_RESOURCE_RAG_GATEWAY_TOKEN"),
+        gateway_timeout_ms=int(args.get("gateway_timeout_ms") or 30000),
     )
 
     inspection = inspect_provider_setup_config(config)
     token_source_summary = "불필요 (local_heuristic)" if inspection.resolved_provider == "local_heuristic" else "미확인"
     if inspection.auth_mode == "api_key":
         token_source_summary = f"API key 환경 변수 `{inspection.provider_api_key_env}`"
+    elif inspection.resolved_provider == "gateway" and inspection.token_source_detail:
+        token_source_summary = f"선택적 gateway bearer env `{inspection.token_source_detail}`"
     elif inspection.token_source == "env" and inspection.token_source_detail:
         token_source_summary = f"환경 변수 `{inspection.token_source_detail}`"
     elif inspection.token_source == "file" and inspection.token_source_detail:
@@ -408,6 +438,9 @@ def inspect_provider_setup(args: dict[str, Any]) -> dict[str, Any]:
         "tokenSource": inspection.token_source,
         "tokenSourceDetail": inspection.token_source_detail,
         "tokenSourceSummary": token_source_summary,
+        "gatewayUrl": str(args["gateway_url"]) if args.get("gateway_url") else None,
+        "gatewayAuthTokenEnv": str(args.get("gateway_auth_token_env") or "UNITY_RESOURCE_RAG_GATEWAY_TOKEN"),
+        "gatewayTimeoutMs": int(args.get("gateway_timeout_ms") or 30000),
         "recommendedChoice": inspection.recommended_choice,
         "missingSettings": inspection.missing_settings,
         "nextActions": inspection.next_actions,
@@ -451,6 +484,9 @@ def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
         ("oauth_token_file", "--oauth-token-file"),
         ("oauth_token_command", "--oauth-token-command"),
         ("codex_auth_file", "--codex-auth-file"),
+        ("gateway_url", "--gateway-url"),
+        ("gateway_auth_token_env", "--gateway-auth-token-env"),
+        ("gateway_timeout_ms", "--gateway-timeout-ms"),
         ("model", "--model"),
         ("detail", "--detail"),
         ("max_image_dim", "--max-image-dim"),

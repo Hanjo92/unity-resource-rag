@@ -17,6 +17,7 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --image /absolute/path/to/reference.png \
   --catalog /absolute/path/to/resource_catalog.jsonl \
   --provider auto \
+  --gateway-url http://127.0.0.1:8080 \
   --hint "mobile reward popup" \
   --safe-area-component-type "MyGame.UI.SafeAreaFitter" \
   --safe-area-properties '{"applyOnAwake": true}'
@@ -41,16 +42,19 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
 
 provider 메모:
 
-- `--provider auto`: 기본적으로 OpenAI 키/Codex OAuth가 있으면 `openai`, 없으면 Google API key -> `gemini`, 없으면 Google OAuth / gcloud access token -> `antigravity`, 없으면 `ANTHROPIC_API_KEY` -> `claude`, 없으면 `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` -> `claude_code`, 셋 다 없으면 `local_heuristic`
+- `--provider auto`: `--gateway-url` 또는 `UNITY_RESOURCE_RAG_GATEWAY_URL`이 있으면 `gateway`, 없으면 OpenAI 키/Codex OAuth가 있으면 `openai`, 없으면 Google API key -> `gemini`, 없으면 Google OAuth / gcloud access token -> `antigravity`, 없으면 `ANTHROPIC_API_KEY` -> `claude`, 없으면 `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` -> `claude_code`, 셋 다 없으면 `local_heuristic`
 - OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`)을 주면 `--provider-api-key-env`보다 OAuth 설정이 우선된다
 - 명시적인 OAuth 입력이 없어도 `$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`에 Codex 로그인 토큰이 있으면 `--provider auto`가 OpenAI provider를 계속 사용할 수 있다
+- `--provider gateway --gateway-url ...`: OAuth-protected gateway 또는 team gateway 사용
 - `--provider local_heuristic`: 완전 로컬 fallback
 - `--provider gemini`: Google OpenAI-compatible endpoint preset (`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`)
 - `--provider antigravity`: Google OpenAI-compatible endpoint + OAuth preset (`GOOGLE_OAUTH_ACCESS_TOKEN` 또는 `gcloud auth application-default print-access-token`)
 - `--provider claude`: Anthropic OpenAI-compatible endpoint preset (`ANTHROPIC_API_KEY`)
 - `--provider claude_code`: Anthropic OpenAI-compatible endpoint + Claude Code bearer preset (`ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json`)
-- `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`: 다른 OpenAI-compatible 서비스로 확장
+- `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`: 다른 OpenAI-compatible 서비스로 확장. Codex OAuth 자동 재사용 대신 서비스 전용 API key 또는 명시적 OAuth 입력을 사용
 - workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`를 그대로 전달한다
+- `--gateway-auth-token-env ...`: gateway bearer token env var 이름
+- `--gateway-timeout-ms ...`: gateway request timeout
 
 MCP tool preset 메모:
 

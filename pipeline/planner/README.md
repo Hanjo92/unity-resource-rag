@@ -22,6 +22,7 @@ MCP handoff와 repair bundle이 Unity MCP와 어떻게 연결되는지는 [mcp-s
 python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --provider auto \
+  --gateway-url http://127.0.0.1:8080 \
   --hint "mobile reward popup" \
   --safe-area-component-type "MyGame.UI.SafeAreaFitter" \
   --safe-area-properties '{"applyOnAwake": true}'
@@ -29,15 +30,18 @@ python3 pipeline/planner/extract_reference_layout.py \
 
 provider 메모:
 
-- `auto`: 기본적으로 `OPENAI_API_KEY` 또는 Codex OAuth auth file이 있으면 `openai`, 없으면 Google API key -> `gemini`, 없으면 Google OAuth / gcloud access token -> `antigravity`, 없으면 `ANTHROPIC_API_KEY` -> `claude`, 없으면 `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` -> `claude_code`, 셋 다 없으면 `local_heuristic`
+- `auto`: `UNITY_RESOURCE_RAG_GATEWAY_URL`이 있으면 `gateway`, 없으면 `OPENAI_API_KEY` 또는 Codex OAuth auth file이 있으면 `openai`, 없으면 Google API key -> `gemini`, 없으면 Google OAuth / gcloud access token -> `antigravity`, 없으면 `ANTHROPIC_API_KEY` -> `claude`, 없으면 `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json` -> `claude_code`, 셋 다 없으면 `local_heuristic`
 - OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`)이 있으면 `provider_api_key_env`보다 OAuth 설정이 우선된다
 - 명시적인 OAuth 입력이 없어도 `$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`에 Codex 로그인 토큰이 있으면 `auto`가 `openai`를 선택한다
+- `gateway`: OAuth-protected gateway 또는 team gateway를 통해 extraction capability 호출
 - `local_heuristic`: 키 없이 동작하는 로컬 fallback
 - `gemini`: Google OpenAI-compatible endpoint preset (`GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`, 기본 base URL 자동 설정)
 - `antigravity`: Google OpenAI-compatible endpoint + OAuth preset (`GOOGLE_OAUTH_ACCESS_TOKEN` 또는 `gcloud auth application-default print-access-token`)
 - `claude`: Anthropic OpenAI-compatible endpoint preset (`ANTHROPIC_API_KEY`, 기본 base URL 자동 설정)
 - `claude_code`: Anthropic OpenAI-compatible endpoint + Claude Code bearer preset (`ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json`)
-- `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용
+- `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용. 보통 `provider_base_url`과 해당 서비스 API key를 함께 지정한다
+- `--gateway-auth-token-env`: gateway bearer token이 들어 있는 env var 이름
+- `--gateway-timeout-ms`: gateway request timeout
 
 MCP tool preset 메모:
 
