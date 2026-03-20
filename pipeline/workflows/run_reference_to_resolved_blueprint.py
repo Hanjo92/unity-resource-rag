@@ -107,6 +107,10 @@ def main() -> int:
     parser.add_argument("--provider", default="auto", help="Extraction provider: auto, openai, openai_compatible, or local_heuristic.")
     parser.add_argument("--provider-base-url", help="Base URL for openai_compatible extraction providers.")
     parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable name for the extraction provider API key.")
+    parser.add_argument("--auth-mode", choices=["auto", "api_key_env", "oauth_token_env", "oauth_token_file", "oauth_token_command"], default="auto", help="Authentication mode for extraction providers.")
+    parser.add_argument("--oauth-token-env", help="Environment variable name containing an OAuth bearer token for extraction providers.")
+    parser.add_argument("--oauth-token-file", help="Path to a file containing an OAuth bearer token for extraction providers.")
+    parser.add_argument("--oauth-token-command", help="Shell command that prints an OAuth bearer token for extraction providers.")
     parser.add_argument("--model", default="gpt-4.1-mini", help="Extraction model.")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default="high", help="Image detail hint for extraction.")
     parser.add_argument("--max-image-dim", type=int, default=1600, help="Maximum width/height sent to extraction.")
@@ -156,6 +160,8 @@ def main() -> int:
             args.provider,
             "--provider-api-key-env",
             args.provider_api_key_env,
+            "--auth-mode",
+            args.auth_mode,
             "--model",
             args.model,
             "--detail",
@@ -168,6 +174,12 @@ def main() -> int:
             command.extend(["--screen-name", args.screen_name])
         if args.provider_base_url:
             command.extend(["--provider-base-url", args.provider_base_url])
+        if args.oauth_token_env:
+            command.extend(["--oauth-token-env", args.oauth_token_env])
+        if args.oauth_token_file:
+            command.extend(["--oauth-token-file", args.oauth_token_file])
+        if args.oauth_token_command:
+            command.extend(["--oauth-token-command", args.oauth_token_command])
         for hint in args.hint:
             command.extend(["--hint", hint])
         if args.safe_area_component_type:

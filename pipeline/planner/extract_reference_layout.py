@@ -6,6 +6,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -23,6 +24,7 @@ DEFAULT_DETAIL = "high"
 DEFAULT_MAX_IMAGE_DIM = 1600
 DEFAULT_PROVIDER = "auto"
 SUPPORTED_PROVIDERS = ("auto", "openai", "openai_compatible", "local_heuristic")
+SUPPORTED_AUTH_MODES = ("auto", "api_key_env", "oauth_token_env", "oauth_token_file", "oauth_token_command")
 
 
 SYSTEM_PROMPT = """
@@ -59,6 +61,10 @@ class ProviderConfig:
     max_image_dim: int
     project_hints: list[str]
     api_key_env: str
+    auth_mode: str
+    oauth_token_env: str | None
+    oauth_token_file: str | None
+    oauth_token_command: str | None
     base_url: str | None
 
 
@@ -197,23 +203,103 @@ def normalize_plan(plan: ReferenceLayoutPlan, *, screen_name: str, image_meta: d
     return ReferenceLayoutPlan.model_validate(data)
 
 
+def _read_token_file(path_value: str) -> str | None:
+    token_path = Path(path_value).expanduser()
+    if not token_path.exists():
+        return None
+    token = token_path.read_text(encoding="utf-8").strip()
+    return token or None
+
+
+def _run_token_command(command: str) -> str | None:
+    completed = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        _die(f"OAuth token command failed with exit code {completed.returncode}: {completed.stderr.strip() or command}")
+    token = completed.stdout.strip()
+    return token or None
+
+
+def resolve_auth_mode(config: ProviderConfig) -> str:
+    if config.auth_mode != "auto":
+        return config.auth_mode
+    if os.getenv(config.api_key_env):
+        return "api_key_env"
+    if config.oauth_token_env and os.getenv(config.oauth_token_env):
+        return "oauth_token_env"
+    if config.oauth_token_file and _read_token_file(config.oauth_token_file):
+        return "oauth_token_file"
+    if config.oauth_token_command:
+        return "oauth_token_command"
+    return "api_key_env"
+
+
+def has_auth_material(config: ProviderConfig, auth_mode: str) -> bool:
+    if auth_mode == "api_key_env":
+        return bool(os.getenv(config.api_key_env))
+    if auth_mode == "oauth_token_env":
+        return bool(config.oauth_token_env and os.getenv(config.oauth_token_env))
+    if auth_mode == "oauth_token_file":
+        return bool(config.oauth_token_file and _read_token_file(config.oauth_token_file))
+    if auth_mode == "oauth_token_command":
+        return bool(config.oauth_token_command)
+    return False
+
+
 def resolve_provider(config: ProviderConfig) -> str:
     if config.provider != "auto":
         return config.provider
-    return "openai" if os.getenv(config.api_key_env) else "local_heuristic"
+    return "openai" if has_auth_material(config, resolve_auth_mode(config)) else "local_heuristic"
 
 
-def create_openai_client(*, api_key_env: str, base_url: str | None):
+def resolve_auth_value(config: ProviderConfig) -> tuple[str, str]:
+    auth_mode = resolve_auth_mode(config)
+
+    if auth_mode == "api_key_env":
+        api_key = os.getenv(config.api_key_env)
+        if not api_key:
+            _die(f"{config.api_key_env} is not set.")
+        return auth_mode, api_key
+
+    if auth_mode == "oauth_token_env":
+        if not config.oauth_token_env:
+            _die("--oauth-token-env is required for --auth-mode oauth_token_env.")
+        token = os.getenv(config.oauth_token_env)
+        if not token:
+            _die(f"{config.oauth_token_env} is not set.")
+        return auth_mode, token
+
+    if auth_mode == "oauth_token_file":
+        if not config.oauth_token_file:
+            _die("--oauth-token-file is required for --auth-mode oauth_token_file.")
+        token = _read_token_file(config.oauth_token_file)
+        if not token:
+            _die(f"OAuth token file is missing or empty: {config.oauth_token_file}")
+        return auth_mode, token
+
+    if auth_mode == "oauth_token_command":
+        if not config.oauth_token_command:
+            _die("--oauth-token-command is required for --auth-mode oauth_token_command.")
+        token = _run_token_command(config.oauth_token_command)
+        if not token:
+            _die("OAuth token command produced an empty token.")
+        return auth_mode, token
+
+    _die(f"Unsupported auth mode: {auth_mode}")
+
+
+def create_openai_client(*, credential: str, base_url: str | None):
     try:
         from openai import OpenAI
     except ImportError:
         _die("openai SDK not installed. Install with `uv pip install openai`.")
 
-    api_key = os.getenv(api_key_env)
-    if not api_key:
-        _die(f"{api_key_env} is not set.")
-
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(api_key=credential, base_url=base_url)
 
 
 def extract_with_openai_like(
@@ -224,7 +310,8 @@ def extract_with_openai_like(
     base_url: str | None,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
     data_url, image_meta = encode_image_data_url(image_path, config.max_image_dim)
-    client = create_openai_client(api_key_env=config.api_key_env, base_url=base_url)
+    resolved_auth_mode, credential = resolve_auth_value(config)
+    client = create_openai_client(credential=credential, base_url=base_url)
 
     response = client.responses.parse(
         model=config.model,
@@ -270,6 +357,7 @@ def extract_with_openai_like(
         "projectHints": config.project_hints,
         "baseUrl": base_url,
         "apiKeyEnv": config.api_key_env,
+        "authMode": resolved_auth_mode,
     }
     return plan, report
 
@@ -478,6 +566,7 @@ def dry_run_payload(
 ) -> dict[str, Any]:
     _, image_meta = prepare_analysis_image(image_path, config.max_image_dim)
     resolved_provider = resolve_provider(config)
+    resolved_auth_mode = resolve_auth_mode(config)
     preview = {
         "mode": "dry-run",
         "requestedProvider": config.provider,
@@ -490,6 +579,7 @@ def dry_run_payload(
         "projectHints": config.project_hints,
         "providerBaseUrl": config.base_url,
         "providerApiKeyEnv": config.api_key_env,
+        "authMode": resolved_auth_mode,
     }
 
     if resolved_provider in {"openai", "openai_compatible"}:
@@ -523,6 +613,10 @@ def main() -> int:
     parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default=DEFAULT_PROVIDER, help=f"Extraction provider. Default: {DEFAULT_PROVIDER}")
     parser.add_argument("--provider-base-url", help="Base URL for openai_compatible providers.")
     parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key.")
+    parser.add_argument("--auth-mode", choices=SUPPORTED_AUTH_MODES, default="auto", help="Authentication mode for API-backed providers.")
+    parser.add_argument("--oauth-token-env", help="Environment variable containing an OAuth bearer token for API-backed providers.")
+    parser.add_argument("--oauth-token-file", help="File containing an OAuth bearer token for API-backed providers.")
+    parser.add_argument("--oauth-token-command", help="Shell command that prints an OAuth bearer token for API-backed providers.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
@@ -544,6 +638,10 @@ def main() -> int:
         max_image_dim=args.max_image_dim,
         project_hints=args.hint,
         api_key_env=args.provider_api_key_env,
+        auth_mode=args.auth_mode,
+        oauth_token_env=args.oauth_token_env,
+        oauth_token_file=args.oauth_token_file,
+        oauth_token_command=args.oauth_token_command,
         base_url=args.provider_base_url,
     )
 
