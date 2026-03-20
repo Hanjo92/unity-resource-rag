@@ -4,23 +4,30 @@
 [![License](https://img.shields.io/github/license/Hanjo92/unity-resource-rag)](./LICENSE)
 [![Unity](https://img.shields.io/badge/Unity-2021.3%2B-black?logo=unity)](./Packages/com.hanjo92.unity-resource-rag/package.json)
 
-`unity-resource-rag`는 레퍼런스 이미지나 목업을 보고, Unity 프로젝트 안의 실제 `Sprite`, `Prefab`, `TMP Font Asset`, `Material`을 우선 사용해 UI를 조립하기 위한 저장소다.
+`unity-resource-rag`는 레퍼런스 이미지나 목업을 바탕으로, Unity 프로젝트 안의 실제 `Sprite`, `Prefab`, `TMP Font Asset`, `Material`을 우선 활용해 UI를 조립하기 위한 저장소다.
 
-이 저장소는 두 레이어로 나뉜다.
+## 한눈에 보기
 
-- Unity 안쪽 실행 레이어: UPM 패키지 `com.hanjo92.unity-resource-rag`
-- Unity 바깥 planning/retrieval/verification 레이어: Python sidecar pipeline + MCP server
+이 저장소는 크게 두 레이어로 구성된다.
 
-## What It Includes
+- **Unity 내부 실행 레이어**: UPM 패키지 `com.hanjo92.unity-resource-rag`
+- **Unity 외부 파이프라인 레이어**: planning / retrieval / verification을 담당하는 Python sidecar + MCP server
 
-- Unity custom tool: `index_project_resources`
-- Unity resource: `ui_asset_catalog`
-- Unity custom tool: `apply_ui_blueprint`
-- Sidecar workflow: `reference image -> resolved blueprint -> MCP handoff`
+## 주요 구성 요소
+
+### Unity 쪽
+
+- Custom tool: `index_project_resources`
+- Resource catalog: `ui_asset_catalog`
+- Custom tool: `apply_ui_blueprint`
+
+### Sidecar 쪽
+
+- Workflow: `reference image -> resolved blueprint -> MCP handoff`
 - Verification workflow: `screenshot compare -> repair handoff`
 - MCP server wrapper: `python3 -m pipeline.mcp`
 
-## Repository Layout
+## 저장소 구조
 
 - `Packages/com.hanjo92.unity-resource-rag/`
 - `pipeline/`
@@ -28,22 +35,17 @@
 - `docs/`
 - `examples/`
 
-## Links
-
-- Repository: [Hanjo92/unity-resource-rag](https://github.com/Hanjo92/unity-resource-rag)
-- Issues: [github.com/Hanjo92/unity-resource-rag/issues](https://github.com/Hanjo92/unity-resource-rag/issues)
-- Changelog: [CHANGELOG.md](./CHANGELOG.md)
-- Releases: [github.com/Hanjo92/unity-resource-rag/releases](https://github.com/Hanjo92/unity-resource-rag/releases)
-
-## Requirements
+## 요구 사항
 
 - Python 3.11+
-- Unity project with `unity-mcp`
-- Optional: `OPENAI_API_KEY`
+- `unity-mcp`가 설치된 Unity 프로젝트
+- 선택 사항: `OPENAI_API_KEY`
 
-키가 없어도 동작은 가능하다. 이 경우 이미지 레이아웃 추출은 `local_heuristic` fallback을 사용한다.
+> 키가 없어도 동작은 가능하다. 이 경우 이미지 레이아웃 추출은 `local_heuristic` fallback을 사용한다.
 
-## Python Setup
+## 설치
+
+### 1) Python 설정
 
 ```bash
 python3 -m venv .venv
@@ -51,41 +53,47 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Unity Setup
+### 2) Unity 설정
 
 1. Unity 프로젝트에 `unity-mcp`를 설치한다.
-2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag) 를 `Packages/` 아래에 두거나 Git URL로 설치한다.
-3. Unity에서 custom tool discovery가 되면 `index_project_resources`, `ui_asset_catalog`, `apply_ui_blueprint`를 사용할 수 있다.
+2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag)를 `Packages/` 아래에 두거나 Git URL로 설치한다.
+3. Unity에서 custom tool discovery가 완료되면 `index_project_resources`, `ui_asset_catalog`, `apply_ui_blueprint`를 사용할 수 있다.
 
-패키지 문서는 [Packages/com.hanjo92.unity-resource-rag/README.md](./Packages/com.hanjo92.unity-resource-rag/README.md)를 보면 된다.
+패키지 상세 문서는 [Packages/com.hanjo92.unity-resource-rag/README.md](./Packages/com.hanjo92.unity-resource-rag/README.md)에서 확인할 수 있다.
 
-## MCP Client Setup
+### 3) MCP 클라이언트 설정
 
-이 저장소는 `unity-mcp`를 대체하지 않는다. `unity-mcp`는 Unity Editor를 실제로 조작하고, 이 저장소의 MCP server는 planning/retrieval/repair sidecar를 담당한다.
+이 저장소는 `unity-mcp`를 대체하지 않는다.
 
-클라이언트 설정 예시는 [docs/mcp-client-setup.md](./docs/mcp-client-setup.md) 와 [examples/mcp/mcp-client-config.example.json](./examples/mcp/mcp-client-config.example.json) 에 정리했다.
+- `unity-mcp`: Unity Editor를 실제로 조작
+- 이 저장소의 MCP server: planning / retrieval / repair sidecar를 담당
 
-직접 실행할 때는:
+클라이언트 설정 예시는 다음 문서에 정리되어 있다.
+
+- [docs/mcp-client-setup.md](./docs/mcp-client-setup.md)
+- [examples/mcp/mcp-client-config.example.json](./examples/mcp/mcp-client-config.example.json)
+
+직접 실행할 때는 아래 둘 중 하나를 사용하면 된다.
 
 ```bash
 python3 -m pipeline.mcp
 ```
 
-또는:
-
 ```bash
 python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 ```
 
-## Quick Start
+## 빠른 시작
 
-1. Unity에서 `index_project_resources`로 `resource_catalog.jsonl`을 만든다.
+### 기본 흐름
+
+1. Unity에서 `index_project_resources`를 실행해 `resource_catalog.jsonl`을 생성한다.
 2. MCP client에 이 저장소의 sidecar server를 등록한다.
 3. 레퍼런스 이미지에서 시작할 때는 `unity_rag.run_reference_to_resolved_blueprint`를 호출한다.
-4. 생성된 handoff bundle을 Unity 쪽 `apply_ui_blueprint`와 `manage_camera`에 넘긴다.
-5. 결과가 다르면 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
+4. 생성된 handoff bundle을 Unity 쪽 `apply_ui_blueprint`와 `manage_camera`에 전달한다.
+5. 결과가 기대와 다르면 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
 
-CLI로 먼저 시험할 때는:
+### CLI 예시
 
 ```bash
 python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
@@ -94,17 +102,29 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --provider auto
 ```
 
-## Key Docs
+## 문서 바로가기
+
+### 핵심 문서
 
 - [docs/asset-aware-ui-rag-architecture.md](./docs/asset-aware-ui-rag-architecture.md)
-- [CHANGELOG.md](./CHANGELOG.md)
 - [specs/mcp-sidecar-contract.md](./specs/mcp-sidecar-contract.md)
 - [specs/ui-assembly-contract.md](./specs/ui-assembly-contract.md)
 - [specs/ui-binding-contract.md](./specs/ui-binding-contract.md)
-- [examples/mcp/end-to-end-usage.md](./examples/mcp/end-to-end-usage.md)
 
-## Upload Notes
+### 참고 자료
+
+- [examples/mcp/end-to-end-usage.md](./examples/mcp/end-to-end-usage.md)
+- [CHANGELOG.md](./CHANGELOG.md)
+
+## 링크
+
+- Repository: [Hanjo92/unity-resource-rag](https://github.com/Hanjo92/unity-resource-rag)
+- Issues: [github.com/Hanjo92/unity-resource-rag/issues](https://github.com/Hanjo92/unity-resource-rag/issues)
+- Releases: [github.com/Hanjo92/unity-resource-rag/releases](https://github.com/Hanjo92/unity-resource-rag/releases)
+- License: [LICENSE](./LICENSE)
+
+## 참고 사항
 
 - 생성물과 캐시는 `.gitignore`로 제외한다.
-- 실제 사용 전 Unity 프로젝트 안에서 C# 컴파일 확인은 한 번 더 필요하다.
-- 라이선스는 MIT이며, 루트 [LICENSE](./LICENSE)에 포함되어 있다.
+- 실제 사용 전에는 Unity 프로젝트 안에서 C# 컴파일 상태를 한 번 더 확인하는 것이 좋다.
+- 라이선스는 MIT이며, 자세한 내용은 루트 [LICENSE](./LICENSE)에 포함되어 있다.
