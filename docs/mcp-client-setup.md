@@ -1,11 +1,104 @@
 # MCP Client Setup
 
-이 저장소는 `unity-mcp` 옆에 붙는 sidecar MCP server를 제공한다.
+이 문서는 긴 설명서보다 먼저 고를 수 있는 선택 가이드로 시작한다. 먼저 아래 질문 3개로 본인에게 맞는 연결 방식을 고른 뒤, 바로 아래 preset 예시를 복사하면 된다.
 
-- `unity-mcp`: Unity Editor 실제 조작
-- `unity-resource-rag`: reference extraction, asset binding workflow, repair planning
+## 빠른 선택 가이드
 
-둘은 함께 쓰는 게 기준이다.
+### 질문 1. Codex로 로그인되어 있나요?
+
+- 예 → `connection_preset: "codex_oauth"`를 권장한다. Codex OAuth를 그대로 재사용해 OpenAI provider로 연결한다.
+- 아니오 → 질문 2로 넘어가 권장 provider 또는 preset을 고른다.
+
+### 질문 2. OpenAI/Gemini/Claude 중 이미 쓰는 계정이 있나요?
+
+- OpenAI 계정/API 키가 있다 → `connection_preset: "openai_api_key"` 또는 CLI의 `--provider openai`를 권장한다.
+- Gemini 계정/API 키가 있다 → `connection_preset: "gemini_api_key"` 또는 CLI의 `--provider gemini`를 권장한다.
+- Claude 계정/API 키 또는 Claude Code credential이 있다 → `connection_preset: "claude_api_key"` 또는 `"claude_code"`를 권장한다.
+- 셋 다 아직 없다 → `connection_preset: "recommended_auto"`로 시작해 자동 감지를 먼저 시도한다.
+
+### 질문 3. 인터넷 없이 테스트만 하고 싶나요?
+
+- 예 → `connection_preset: "offline_local"` 또는 CLI의 `--provider local_heuristic`를 권장한다.
+- 아니오 → 위에서 고른 preset/provider를 그대로 사용한다.
+
+## 추천 설정 5가지
+
+자주 쓰는 조합만 짧게 복사할 수 있도록 정리했다. 실제 파일 예시는 [examples/mcp/README.md](../examples/mcp/README.md)와 각 예시 JSON 파일을 참고하면 된다.
+
+### 1) Codex OAuth 재사용
+
+Codex에 이미 로그인되어 있고 같은 사용자 홈에서 sidecar를 실행할 때 가장 간단하다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "codex_oauth"
+  }
+}
+```
+
+### 2) OpenAI API key
+
+`OPENAI_API_KEY`를 이미 관리하고 있으면 가장 익숙한 설정이다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "openai_api_key"
+  }
+}
+```
+
+### 3) Gemini API key
+
+Google AI Studio 또는 Gemini API 키를 이미 쓰고 있다면 이 조합이 가장 빠르다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "gemini_api_key"
+  }
+}
+```
+
+### 4) Claude Code credential
+
+Claude Code credential 또는 bearer token 재사용이 필요하면 이 preset을 쓴다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "claude_code"
+  }
+}
+```
+
+### 5) 로컬 heuristic 테스트
+
+네트워크나 API 키 없이 레이아웃 추출 흐름만 확인하고 싶을 때 사용한다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "offline_local"
+  }
+}
+```
 
 ## Generic `mcpServers` Example
 
@@ -26,7 +119,7 @@
 }
 ```
 
-샘플 파일은 [examples/mcp/mcp-client-config.example.json](../examples/mcp/mcp-client-config.example.json) 에 있다.
+사용 시나리오별 샘플 파일은 [examples/mcp/README.md](../examples/mcp/README.md)에 정리되어 있다.
 
 ## Absolute Script Path Variant
 
