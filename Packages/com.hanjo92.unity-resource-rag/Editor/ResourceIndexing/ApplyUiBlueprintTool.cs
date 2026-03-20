@@ -446,8 +446,9 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 SetProperty(textComponent, "color", color);
             }
 
+            string error = null;
             if (spec.fontAsset != null &&
-                UnityAssetResolver.TryResolveTmpFont(spec.fontAsset, out UnityEngine.Object fontAsset, out _, out string error))
+                UnityAssetResolver.TryResolveTmpFont(spec.fontAsset, out UnityEngine.Object fontAsset, out _, out error))
             {
                 SetProperty(textComponent, "font", fontAsset);
             }

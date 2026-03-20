@@ -1,6 +1,7 @@
 {
   "name": "Hanjo92.UnityResourceRag.Editor",
   "references": [
+    "MCPForUnity.Editor",
     "Unity.Newtonsoft.Json"
   ],
   "includePlatforms": [

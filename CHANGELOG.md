@@ -4,7 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+No unreleased changes yet.
+
+## [0.4.0-beta] - 2026-03-21
+
+### Added
+
+- beta release notes for real-project validation under `docs/releases/0.4.0-beta.md`
+- GitHub quality case report template for collecting real-project validation results
+
+### Changed
+
+- validated the `catalog -> blueprint -> Unity output` flow in a real Unity project
+- fixed Unity hookup issues discovered during live package installation, including the editor assembly reference and `ApplyUiBlueprintTool` compile path
+- aligned upcoming release positioning around a beta milestone focused on real-project validation rather than full quality sign-off
+
+### Notes
+
+- current evidence supports a beta release for functional validation
+- generation quality still needs additional real-project cases across multiple screen types before a broader stability-oriented release
 
 ## [0.3.0] - 2026-03-21
 
@@ -79,7 +97,8 @@ Initial public scaffold for `unity-resource-rag`.
 - Example JSON files were validated locally.
 - Final Unity compile/runtime verification still needs a real Unity project with `unity-mcp`.
 
-[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.3.0...main
+[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.4.0-beta...main
+[0.4.0-beta]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.4.0-beta
 [0.3.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.3.0
 [0.2.1]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.2.1
 [0.1.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/v0.1.0
