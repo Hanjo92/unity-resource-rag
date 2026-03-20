@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from dataclasses import dataclass
 from io import BytesIO
@@ -24,9 +25,67 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 DEFAULT_DETAIL = "high"
 DEFAULT_MAX_IMAGE_DIM = 1600
 DEFAULT_PROVIDER = "auto"
-SUPPORTED_PROVIDERS = ("auto", "openai", "openai_compatible", "local_heuristic")
+SUPPORTED_PROVIDERS = ("auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic")
 DEFAULT_CODEX_AUTH_FILE = "auth.json"
-CODEX_TOKEN_KEY_CANDIDATES = (
+DEFAULT_CLAUDE_CODE_AUTH_FILE = ".credentials.json"
+DEFAULT_GOOGLE_OAUTH_COMMAND = "gcloud auth application-default print-access-token"
+PROVIDER_DEFAULTS: dict[str, dict[str, str | None]] = {
+    "openai": {
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": None,
+        "default_model": DEFAULT_MODEL,
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "gemini": {
+        "api_key_env": "GEMINI_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-flash",
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "antigravity": {
+        "api_key_env": "GOOGLE_API_KEY",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_model": "gemini-2.5-flash",
+        "default_auth_mode": "oauth_token",
+        "default_oauth_token_env": "GOOGLE_OAUTH_ACCESS_TOKEN",
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": DEFAULT_GOOGLE_OAUTH_COMMAND,
+    },
+    "claude": {
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url": "https://api.anthropic.com/v1/",
+        "default_model": "claude-opus-4-6",
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "claude_code": {
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url": "https://api.anthropic.com/v1/",
+        "default_model": "claude-opus-4-6",
+        "default_auth_mode": "oauth_token",
+        "default_oauth_token_env": "ANTHROPIC_AUTH_TOKEN",
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+    "openai_compatible": {
+        "api_key_env": "OPENAI_API_KEY",
+        "base_url": None,
+        "default_model": DEFAULT_MODEL,
+        "default_auth_mode": "api_key",
+        "default_oauth_token_env": None,
+        "default_oauth_token_file": None,
+        "default_oauth_token_command": None,
+    },
+}
+TOKEN_KEY_CANDIDATES = (
     ("access_token",),
     ("accessToken",),
     ("tokens", "access_token"),
@@ -35,6 +94,10 @@ CODEX_TOKEN_KEY_CANDIDATES = (
     ("credentials", "accessToken"),
     ("auth", "access_token"),
     ("auth", "accessToken"),
+    ("claudeAiOauth", "accessToken"),
+    ("claudeAiOauth", "access_token"),
+    ("oauth", "accessToken"),
+    ("oauth", "access_token"),
 )
 
 
@@ -85,6 +148,19 @@ class ProviderAuth:
     auth_mode: str
     bearer_token: str | None
     token_source: str
+
+
+@dataclass(frozen=True)
+class ResolvedProviderConfig:
+    requested_provider: str
+    provider: str
+    api_key_env: str
+    base_url: str | None
+    model: str
+    auth_mode: str | None
+    oauth_token_env: str | None
+    oauth_token_file: str | None
+    oauth_token_command: str | None
 
 
 def _die(message: str) -> None:
@@ -222,6 +298,159 @@ def normalize_plan(plan: ReferenceLayoutPlan, *, screen_name: str, image_meta: d
     return ReferenceLayoutPlan.model_validate(data)
 
 
+def _provider_defaults(provider: str) -> dict[str, str | None]:
+    return PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
+
+
+def _default_claude_code_auth_file() -> Path:
+    claude_config_dir = os.getenv("CLAUDE_CONFIG_DIR")
+    base_dir = Path(claude_config_dir).expanduser() if claude_config_dir else Path.home() / ".claude"
+    return base_dir / DEFAULT_CLAUDE_CODE_AUTH_FILE
+
+
+def _default_token_file_for_provider(provider: str) -> str | None:
+    if provider == "claude_code":
+        return str(_default_claude_code_auth_file())
+    return None
+
+
+def _command_exists(command: str) -> bool:
+    argv = shlex.split(command)
+    if not argv:
+        return False
+    return shutil.which(argv[0]) is not None
+
+
+def _has_command_token(command: str) -> bool:
+    if not _command_exists(command):
+        return False
+    try:
+        return bool(_read_token_from_command(command))
+    except SystemExit:
+        return False
+
+
+def resolve_runtime_provider_config(config: ProviderConfig) -> ResolvedProviderConfig:
+    requested_provider = config.provider
+
+    if requested_provider == "auto":
+        if has_provider_auth(config):
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="openai",
+                api_key_env=config.api_key_env,
+                base_url=None,
+                model=config.model,
+                auth_mode=config.auth_mode,
+                oauth_token_env=config.oauth_token_env,
+                oauth_token_file=config.oauth_token_file,
+                oauth_token_command=config.oauth_token_command,
+            )
+        if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+            defaults = _provider_defaults("gemini")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="gemini",
+                api_key_env="GOOGLE_API_KEY" if os.getenv("GOOGLE_API_KEY") else str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("gemini"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("GOOGLE_OAUTH_ACCESS_TOKEN") or _has_command_token(DEFAULT_GOOGLE_OAUTH_COMMAND):
+            defaults = _provider_defaults("antigravity")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="antigravity",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("antigravity"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("ANTHROPIC_API_KEY"):
+            defaults = _provider_defaults("claude")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="claude",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("claude"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        if os.getenv("ANTHROPIC_AUTH_TOKEN") or _has_readable_token_file(_default_token_file_for_provider("claude_code")):
+            defaults = _provider_defaults("claude_code")
+            return ResolvedProviderConfig(
+                requested_provider=requested_provider,
+                provider="claude_code",
+                api_key_env=str(defaults["api_key_env"]),
+                base_url=defaults["base_url"],
+                model=str(defaults["default_model"]),
+                auth_mode=defaults["default_auth_mode"],
+                oauth_token_env=defaults["default_oauth_token_env"],
+                oauth_token_file=_default_token_file_for_provider("claude_code"),
+                oauth_token_command=defaults["default_oauth_token_command"],
+            )
+        return ResolvedProviderConfig(
+            requested_provider=requested_provider,
+            provider="local_heuristic",
+            api_key_env=config.api_key_env,
+            base_url=None,
+            model=config.model,
+            auth_mode=config.auth_mode,
+            oauth_token_env=config.oauth_token_env,
+            oauth_token_file=config.oauth_token_file,
+            oauth_token_command=config.oauth_token_command,
+        )
+
+    if requested_provider == "local_heuristic":
+        return ResolvedProviderConfig(
+            requested_provider=requested_provider,
+            provider="local_heuristic",
+            api_key_env=config.api_key_env,
+            base_url=None,
+            model=config.model,
+            auth_mode=config.auth_mode,
+            oauth_token_env=config.oauth_token_env,
+            oauth_token_file=config.oauth_token_file,
+            oauth_token_command=config.oauth_token_command,
+        )
+
+    defaults = _provider_defaults(requested_provider)
+    base_url = config.base_url if config.base_url else defaults["base_url"]
+    api_key_env = config.api_key_env
+    if api_key_env == "OPENAI_API_KEY" and defaults["api_key_env"]:
+        api_key_env = str(defaults["api_key_env"])
+
+    model = config.model
+    if model == DEFAULT_MODEL and defaults["default_model"]:
+        model = str(defaults["default_model"])
+
+    auth_mode = config.auth_mode or defaults["default_auth_mode"]
+    oauth_token_env = config.oauth_token_env or defaults["default_oauth_token_env"]
+    oauth_token_file = config.oauth_token_file or _default_token_file_for_provider(requested_provider)
+    oauth_token_command = config.oauth_token_command or defaults["default_oauth_token_command"]
+
+    return ResolvedProviderConfig(
+        requested_provider=requested_provider,
+        provider=requested_provider,
+        api_key_env=api_key_env,
+        base_url=base_url,
+        model=model,
+        auth_mode=auth_mode,
+        oauth_token_env=oauth_token_env,
+        oauth_token_file=oauth_token_file,
+        oauth_token_command=oauth_token_command,
+    )
+
+
 def _configured_auth_mode(config: ProviderConfig) -> str:
     if config.auth_mode and config.auth_mode not in {"api_key", "oauth_token"}:
         _die(f"Unsupported auth mode: {config.auth_mode}")
@@ -231,7 +460,7 @@ def _configured_auth_mode(config: ProviderConfig) -> str:
         return config.auth_mode
     if os.getenv(config.api_key_env):
         return "api_key"
-    if _has_readable_codex_auth_file(None):
+    if config.provider in {"auto", "openai", "openai_compatible"} and _has_readable_codex_auth_file(None):
         return "oauth_token"
     return "api_key"
 
@@ -254,8 +483,8 @@ def _extract_nested_string(payload: Any, key_path: tuple[str, ...]) -> str | Non
     return None
 
 
-def _extract_codex_access_token(payload: Any) -> str | None:
-    for key_path in CODEX_TOKEN_KEY_CANDIDATES:
+def _extract_access_token(payload: Any) -> str | None:
+    for key_path in TOKEN_KEY_CANDIDATES:
         token = _extract_nested_string(payload, key_path)
         if token:
             return token
@@ -270,22 +499,37 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
         ("codex_file", config.codex_auth_file),
     ]
     configured = [(name, value) for name, value in sources if value]
-    if len(configured) > 1:
-        _die("Provide only one OAuth token source: --oauth-token-env, --oauth-token-file, --oauth-token-command, or --codex-auth-file.")
     if configured:
         return configured[0]
 
-    default_codex_auth_file = _default_codex_auth_file()
-    if _has_readable_codex_auth_file(str(default_codex_auth_file)):
-        return ("codex_file", str(default_codex_auth_file))
+    if config.provider == "claude_code":
+        default_claude_file = _default_claude_code_auth_file()
+        if _has_readable_token_file(str(default_claude_file)):
+            return ("file", str(default_claude_file))
 
-    _die("OAuth token auth requires --oauth-token-env, --oauth-token-file, --oauth-token-command, or a readable Codex auth file (default: ~/.codex/auth.json).")
+    if config.provider == "antigravity" and _has_command_token(DEFAULT_GOOGLE_OAUTH_COMMAND):
+        return ("command", DEFAULT_GOOGLE_OAUTH_COMMAND)
+
+    if config.provider in {"auto", "openai", "openai_compatible"}:
+        default_codex_auth_file = _default_codex_auth_file()
+        if _has_readable_codex_auth_file(str(default_codex_auth_file)):
+            return ("codex_file", str(default_codex_auth_file))
+
+    _die("OAuth token auth requires --oauth-token-env, --oauth-token-file, --oauth-token-command, or a readable auth file/default token source.")
 
 
 def _read_token_from_file(path_value: str) -> str:
-    token = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
-    if not token:
+    raw = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    if not raw:
         _die(f"OAuth token file is empty: {path_value}")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+    token = _extract_access_token(payload)
+    if not token:
+        _die(f"OAuth token file does not contain an access token: {path_value}")
     return token
 
 
@@ -298,8 +542,10 @@ def _has_readable_token_file(path_value: str | None) -> bool:
         return False
 
     try:
-        return bool(token_file.read_text(encoding="utf-8").strip())
+        return bool(_read_token_from_file(str(token_file)))
     except OSError:
+        return False
+    except SystemExit:
         return False
 
 
@@ -314,7 +560,7 @@ def _read_token_from_codex_auth_file(path_value: str | None) -> str:
     except OSError as exc:
         _die(f"Failed to read Codex auth file: {auth_file} ({exc})")
 
-    token = _extract_codex_access_token(payload)
+    token = _extract_access_token(payload)
     if not token:
         _die(f"Codex auth file does not contain an access token: {auth_file}")
     return token
@@ -393,9 +639,7 @@ def has_provider_auth(config: ProviderConfig) -> bool:
 
 
 def resolve_provider(config: ProviderConfig) -> str:
-    if config.provider != "auto":
-        return config.provider
-    return "openai" if has_provider_auth(config) else "local_heuristic"
+    return resolve_runtime_provider_config(config).provider
 
 
 def create_openai_client(*, auth: ProviderAuth, base_url: str | None):
@@ -414,15 +658,29 @@ def extract_with_openai_like(
     *,
     image_path: Path,
     config: ProviderConfig,
-    provider_name: str,
-    base_url: str | None,
+    runtime: ResolvedProviderConfig,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
     data_url, image_meta = encode_image_data_url(image_path, config.max_image_dim)
-    auth = resolve_provider_auth(config)
-    client = create_openai_client(auth=auth, base_url=base_url)
+    runtime_config = ProviderConfig(
+        provider=runtime.provider,
+        screen_name=config.screen_name,
+        model=runtime.model,
+        detail=config.detail,
+        max_image_dim=config.max_image_dim,
+        project_hints=config.project_hints,
+        api_key_env=runtime.api_key_env,
+        auth_mode=runtime.auth_mode,
+        oauth_token_env=runtime.oauth_token_env,
+        oauth_token_file=runtime.oauth_token_file,
+        oauth_token_command=runtime.oauth_token_command,
+        codex_auth_file=config.codex_auth_file,
+        base_url=runtime.base_url,
+    )
+    auth = resolve_provider_auth(runtime_config)
+    client = create_openai_client(auth=auth, base_url=runtime.base_url)
 
     response = client.responses.parse(
-        model=config.model,
+        model=runtime.model,
         input=[
             {
                 "role": "user",
@@ -456,15 +714,15 @@ def extract_with_openai_like(
 
     plan = normalize_plan(parsed, screen_name=config.screen_name, image_meta=image_meta)
     report = {
-        "provider": provider_name,
-        "model": config.model,
+        "provider": runtime.provider,
+        "model": runtime.model,
         "responseId": getattr(response, "id", None),
         "usage": getattr(response, "usage", None),
         "image": image_meta,
         "screenName": config.screen_name,
         "projectHints": config.project_hints,
-        "baseUrl": base_url,
-        "apiKeyEnv": config.api_key_env,
+        "baseUrl": runtime.base_url,
+        "apiKeyEnv": runtime.api_key_env,
         "authMode": auth.auth_mode,
         "tokenSource": auth.token_source,
     }
@@ -629,23 +887,16 @@ def extract_plan(
     image_path: Path,
     config: ProviderConfig,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
-    resolved_provider = resolve_provider(config)
+    runtime = resolve_runtime_provider_config(config)
+    resolved_provider = runtime.provider
 
-    if resolved_provider == "openai":
-        plan, report = extract_with_openai_like(
-            image_path=image_path,
-            config=config,
-            provider_name="openai",
-            base_url=None,
-        )
-    elif resolved_provider == "openai_compatible":
-        if not config.base_url:
+    if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
+        if resolved_provider == "openai_compatible" and not runtime.base_url:
             _die("--provider-base-url is required for --provider openai_compatible.")
         plan, report = extract_with_openai_like(
             image_path=image_path,
             config=config,
-            provider_name="openai_compatible",
-            base_url=config.base_url,
+            runtime=runtime,
         )
     elif resolved_provider == "local_heuristic":
         plan, report = extract_with_local_heuristic(
@@ -656,7 +907,7 @@ def extract_plan(
         _die(f"Unsupported provider: {resolved_provider}")
 
     report["resolvedProvider"] = resolved_provider
-    report["requestedProvider"] = config.provider
+    report["requestedProvider"] = runtime.requested_provider
     return plan, report
 
 
@@ -674,23 +925,39 @@ def dry_run_payload(
     config: ProviderConfig,
 ) -> dict[str, Any]:
     _, image_meta = prepare_analysis_image(image_path, config.max_image_dim)
-    resolved_provider = resolve_provider(config)
+    runtime = resolve_runtime_provider_config(config)
+    resolved_provider = runtime.provider
     preview = {
         "mode": "dry-run",
         "requestedProvider": config.provider,
         "resolvedProvider": resolved_provider,
-        "model": config.model,
+        "model": runtime.model,
         "screenName": config.screen_name,
         "imagePath": str(image_path),
         "image": image_meta,
         "detail": config.detail,
         "projectHints": config.project_hints,
-        "providerBaseUrl": config.base_url,
-        "providerApiKeyEnv": config.api_key_env,
+        "providerBaseUrl": runtime.base_url,
+        "providerApiKeyEnv": runtime.api_key_env,
     }
 
-    if resolved_provider in {"openai", "openai_compatible"}:
-        auth = resolve_provider_auth(config, require_token=False)
+    if resolved_provider in {"openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible"}:
+        runtime_config = ProviderConfig(
+            provider=runtime.provider,
+            screen_name=config.screen_name,
+            model=runtime.model,
+            detail=config.detail,
+            max_image_dim=config.max_image_dim,
+            project_hints=config.project_hints,
+            api_key_env=runtime.api_key_env,
+            auth_mode=runtime.auth_mode,
+            oauth_token_env=runtime.oauth_token_env,
+            oauth_token_file=runtime.oauth_token_file,
+            oauth_token_command=runtime.oauth_token_command,
+            codex_auth_file=config.codex_auth_file,
+            base_url=runtime.base_url,
+        )
+        auth = resolve_provider_auth(runtime_config, require_token=False)
         preview["authMode"] = auth.auth_mode
         preview["tokenSource"] = auth.token_source
         preview["instructionsPreview"] = SYSTEM_PROMPT
@@ -721,14 +988,14 @@ def main() -> int:
     parser.add_argument("--report", type=Path, help="Path to write the extraction report JSON")
     parser.add_argument("--screen-name", help="Screen name override. Defaults to the image file stem.")
     parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default=DEFAULT_PROVIDER, help=f"Extraction provider. Default: {DEFAULT_PROVIDER}")
-    parser.add_argument("--provider-base-url", help="Base URL for openai_compatible providers.")
-    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key. Used for backward-compatible api_key auth.")
+    parser.add_argument("--provider-base-url", help="Base URL override for openai_compatible, gemini/antigravity, or claude/claude_code providers.")
+    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key. Defaults are OPENAI_API_KEY/openai, GEMINI_API_KEY or GOOGLE_API_KEY/gemini, ANTHROPIC_API_KEY/claude.")
     parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed providers. Defaults to api_key unless any OAuth input is provided.")
     parser.add_argument("--oauth-token-env", help="Environment variable that stores an OAuth bearer token.")
     parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
     parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file. Defaults to $CODEX_HOME/auth.json or ~/.codex/auth.json when available.")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL} (provider presets override this when you keep the default value).")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
     parser.add_argument("--hint", action="append", default=[], help="Optional project or UI hints to include in the extraction context.")
