@@ -69,10 +69,20 @@ pip install -r requirements.txt
 - `unity-mcp`: Unity Editor를 실제로 조작
 - 이 저장소의 MCP server: planning / retrieval / repair sidecar를 담당
 
-클라이언트 설정 예시는 다음 문서에 정리되어 있다.
+긴 설명 대신, 아래 요약표에서 본인 상황과 가장 가까운 항목을 고른 뒤 [docs/mcp-client-setup.md](./docs/mcp-client-setup.md)의 선택 가이드로 바로 들어가는 것을 권장한다.
+
+| 상황 | 바로 선택할 설정 | 이동 |
+| --- | --- | --- |
+| Codex에 이미 로그인되어 있다 | `codex_oauth` | [빠른 선택 가이드](./docs/mcp-client-setup.md#빠른-선택-가이드) |
+| OpenAI API 키를 이미 쓰고 있다 | `openai_api_key` | [추천 설정 5가지](./docs/mcp-client-setup.md#추천-설정-5가지) |
+| Gemini API 키를 이미 쓰고 있다 | `gemini_api_key` | [추천 설정 5가지](./docs/mcp-client-setup.md#추천-설정-5가지) |
+| Claude Code credential을 재사용하고 싶다 | `claude_code` | [추천 설정 5가지](./docs/mcp-client-setup.md#추천-설정-5가지) |
+| 인터넷 없이 동작만 테스트하고 싶다 | `offline_local` | [추천 설정 5가지](./docs/mcp-client-setup.md#추천-설정-5가지) |
+
+사용 시나리오별 JSON 예시는 아래 문서에서 바로 복사할 수 있다.
 
 - [docs/mcp-client-setup.md](./docs/mcp-client-setup.md)
-- [examples/mcp/mcp-client-config.example.json](./examples/mcp/mcp-client-config.example.json)
+- [examples/mcp/README.md](./examples/mcp/README.md)
 
 직접 실행할 때는 아래 둘 중 하나를 사용하면 된다.
 
