@@ -64,10 +64,12 @@ pip install -r requirements.txt
 
 ### 3) MCP 클라이언트 설정
 
-이 저장소는 `unity-mcp`를 대체하지 않는다.
+이 저장소는 `unity-mcp`를 대체하지 않는다. MCP client에는 두 서버를 함께 등록해야 한다.
 
 - `unity-mcp`: Unity Editor를 실제로 조작
 - 이 저장소의 MCP server: planning / retrieval / repair sidecar를 담당
+
+실사용용 전체 예시는 [examples/mcp/mcp-client-config.with-unity-mcp.example.json](./examples/mcp/mcp-client-config.with-unity-mcp.example.json)에 있고, key 설명은 [examples/mcp/mcp-client-config.with-unity-mcp.example.md](./examples/mcp/mcp-client-config.with-unity-mcp.example.md)에서 볼 수 있다.
 
 긴 설명 대신, 아래 요약표에서 본인 상황과 가장 가까운 항목을 고른 뒤 [docs/mcp-client-setup.md](./docs/mcp-client-setup.md)의 선택 가이드로 바로 들어가는 것을 권장한다.
 
@@ -99,10 +101,10 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 ### 기본 흐름
 
 1. Unity에서 `index_project_resources`를 실행해 `resource_catalog.jsonl`을 생성한다.
-2. MCP client에 이 저장소의 sidecar server를 등록한다.
-3. 레퍼런스 이미지에서 시작할 때는 `unity_rag.run_reference_to_resolved_blueprint`를 호출한다.
-4. 생성된 handoff bundle을 Unity 쪽 `apply_ui_blueprint`와 `manage_camera`에 전달한다.
-5. 결과가 기대와 다르면 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
+2. MCP client에 `unity-mcp`와 `unity-resource-rag` 두 서버를 함께 등록한다.
+3. 먼저 `unity-resource-rag`에서 `unity_rag.run_reference_to_resolved_blueprint`를 호출해 handoff bundle을 만든다.
+4. 이어서 `unity-mcp`에서 handoff bundle을 받아 `apply_ui_blueprint`와 `manage_camera`를 실행한다.
+5. 결과가 기대와 다르면 다시 `unity-resource-rag`의 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
 
 ### CLI 예시
 
