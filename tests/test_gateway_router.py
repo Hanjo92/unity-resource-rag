@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from pipeline.gateway.models import GatewayRunRequest
+from pipeline.gateway.models import GatewayRequestEnvelope
 from pipeline.gateway.router import GatewayCapabilityRouter, GatewayRouteError, create_default_gateway_router
 
 
@@ -35,7 +35,7 @@ class GatewayRouterTests(unittest.TestCase):
         )
 
         with self.assertRaises(GatewayRouteError) as ctx:
-            router.dispatch(GatewayRunRequest.model_validate(_request_payload("unknown_capability")))
+            router.dispatch(GatewayRequestEnvelope.model_validate(_request_payload("unknown_capability")))
 
         self.assertEqual(ctx.exception.code, "unsupported_capability")
         self.assertFalse(ctx.exception.retryable)
@@ -67,5 +67,19 @@ class GatewayRouterTests(unittest.TestCase):
         self.assertEqual(result["adapterId"], "gemini_direct")
         self.assertEqual(result["providerFamily"], "google")
         run_layout_extraction.assert_called_once()
-        self.assertEqual(router.supported_capabilities, ("vision_layout_extraction",))
-        self.assertEqual(router.supported_adapters, ("gemini_direct",))
+        self.assertEqual(
+            router.supported_capabilities,
+            (
+                "vision_layout_extraction",
+                "vision_layout_repair_analysis",
+                "text_embedding",
+            ),
+        )
+        self.assertEqual(
+            router.supported_adapters,
+            (
+                "gemini_direct",
+                "verification_pipeline",
+                "local_text_embedding",
+            ),
+        )

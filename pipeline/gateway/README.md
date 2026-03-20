@@ -6,7 +6,9 @@
 
 - endpoint: `POST /v1/capabilities/run`
 - capability: `vision_layout_extraction`
-- adapter: `gemini_direct`
+- capability: `vision_layout_repair_analysis`
+- capability: `text_embedding`
+- adapters: `gemini_direct`, `verification_pipeline`, `local_text_embedding`
 
 ## Run
 
@@ -98,8 +100,9 @@ python3 pipeline/planner/extract_reference_layout.py \
 
 ## Notes
 
-- 현재 adapter는 `ReferenceLayoutPlan` structured output을 Gemini에 직접 요청한다.
-- 초기 구현이라 `vision_layout_extraction`만 지원한다.
-- 향후 `text_embedding`, `image_embedding`, `vision_layout_repair_analysis` capability를 추가할 수 있다.
+- `vision_layout_extraction`은 `ReferenceLayoutPlan` structured output을 Gemini에 직접 요청한다.
+- `vision_layout_repair_analysis`는 기존 verification 분석과 repair patch candidate 생성을 gateway capability로 감싼다.
+- `text_embedding`은 현재 retrieval integration seam용 로컬 `token-frequency-v1` 출력을 제공한다.
+- 향후 `image_embedding` capability를 추가할 수 있다.
 - `auto` 모드에서는 `GEMINI_API_KEY` -> `GEMINI_OAUTH_TOKEN_FILE` -> 로컬에서 감지된 ADC 순서로 인증 경로를 시도한다.
 - ADC 관련 파일이나 `GOOGLE_APPLICATION_CREDENTIALS`가 보이지 않으면 `auto`는 metadata 탐색을 하지 않고 바로 `auth_required`를 반환한다.

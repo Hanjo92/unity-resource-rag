@@ -22,6 +22,16 @@ class GatewayVisionInput(BaseModel):
     image: dict[str, Any] | None = None
 
 
+class GatewayRequestEnvelope(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    capability: str
+    providerPreference: list[str] = Field(default_factory=list)
+    input: dict[str, Any] = Field(default_factory=dict)
+    outputSchema: str
+    options: GatewayRunOptions = Field(default_factory=GatewayRunOptions)
+
+
 class GatewayRunRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 

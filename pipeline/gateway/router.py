@@ -5,10 +5,10 @@ from typing import Any, Callable
 
 from pydantic import ValidationError
 
-from .models import GatewayRunRequest
+from .models import GatewayRequestEnvelope
 
 
-GatewayCapabilityHandler = Callable[[GatewayRunRequest], dict[str, Any]]
+GatewayCapabilityHandler = Callable[[GatewayRequestEnvelope], dict[str, Any]]
 
 
 class GatewayRouteError(RuntimeError):
@@ -51,7 +51,7 @@ class GatewayCapabilityRouter:
             handler=handler,
         )
 
-    def dispatch(self, request: GatewayRunRequest) -> dict[str, Any]:
+    def dispatch(self, request: GatewayRequestEnvelope) -> dict[str, Any]:
         route = self._routes.get(request.capability)
         if route is None:
             raise GatewayRouteError(
@@ -63,15 +63,30 @@ class GatewayCapabilityRouter:
                     "supportedCapabilities": list(self.supported_capabilities),
                 },
             )
-        return route.handler(request)
-
-    def handle_payload(self, payload: Any) -> dict[str, Any]:
         try:
-            request = GatewayRunRequest.model_validate(payload)
+            return route.handler(request)
         except ValidationError as exc:
             raise GatewayRouteError(
                 "invalid_request",
-                "Request body did not match GatewayRunRequest.",
+                f"Request body did not match the expected {request.capability} input schema.",
+                retryable=False,
+                details={"capability": request.capability, "errors": exc.errors()},
+            ) from exc
+        except ValueError as exc:
+            raise GatewayRouteError(
+                "invalid_request",
+                str(exc),
+                retryable=False,
+                details={"capability": request.capability},
+            ) from exc
+
+    def handle_payload(self, payload: Any) -> dict[str, Any]:
+        try:
+            request = GatewayRequestEnvelope.model_validate(payload)
+        except ValidationError as exc:
+            raise GatewayRouteError(
+                "invalid_request",
+                "Request body did not match GatewayRequestEnvelope.",
                 retryable=False,
                 details={"errors": exc.errors()},
             ) from exc
@@ -97,6 +112,10 @@ def create_default_gateway_router() -> GatewayCapabilityRouter:
     router = GatewayCapabilityRouter()
 
     from .capabilities.vision_layout_extraction import register as register_vision_layout_extraction
+    from .capabilities.vision_layout_repair_analysis import register as register_vision_layout_repair_analysis
+    from .capabilities.text_embedding import register as register_text_embedding
 
     register_vision_layout_extraction(router)
+    register_vision_layout_repair_analysis(router)
+    register_text_embedding(router)
     return router

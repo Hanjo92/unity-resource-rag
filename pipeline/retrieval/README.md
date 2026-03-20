@@ -6,6 +6,7 @@
 
 - `build_vector_index.py`
 - `bind_blueprint_assets.py`
+- `embedding_bridge.py`
 - `search_catalog.py`
 - `vector_index.py`
 
@@ -61,4 +62,5 @@ python3 pipeline/retrieval/bind_blueprint_assets.py \
 
 - 장점: 외부 API 없이 바로 생성 가능하다.
 - 한계: 아직 preview image embedding은 없다.
+- `embedding_bridge.py`는 gateway `text_embedding` 응답을 현재 sparse index 점수로 연결하는 seam 역할을 한다.
 - 다음 단계: preview/image encoder를 추가해서 visual similarity를 score에 합친다.
