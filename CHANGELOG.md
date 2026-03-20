@@ -6,6 +6,30 @@ All notable changes to this project will be documented in this file.
 
 - No unreleased changes yet.
 
+## [0.3.0] - 2026-03-21
+
+Gateway-first benchmarkable pipeline release for `unity-resource-rag`.
+
+### Added
+
+- gateway capability router with `vision_layout_extraction`, `vision_layout_repair_analysis`, `text_embedding`, and preview `image_embedding`
+- retrieval embedding seam and low-confidence binding states with candidate preservation
+- structured repair patch candidate artifacts
+- benchmark fixture scaffold, retrieval/screen scorecard runners, and baseline gate publisher
+- team troubleshooting docs and image embedding preview ADR
+
+### Changed
+
+- gateway startup now exposes benchmark-oriented capability and adapter registration instead of a single extraction slice
+- retrieval bridge can score generic sparse gateway embedding outputs, including the preview visual-token path
+- benchmark assets and sample scorecards are checked in as portable repo-relative artifacts
+- MCP server, gateway server, and UPM package metadata now report version `0.3.0`
+
+### Notes
+
+- The checked-in `v0.3.0` gate artifacts are generated from sample benchmark inputs and are suitable as an engineering baseline.
+- Before a stricter release-candidate sign-off, rerun the same gate with real project captures.
+
 ## [0.2.1] - 2026-03-20
 
 Provider runtime and release polish for `unity-resource-rag`.
@@ -55,6 +79,7 @@ Initial public scaffold for `unity-resource-rag`.
 - Example JSON files were validated locally.
 - Final Unity compile/runtime verification still needs a real Unity project with `unity-mcp`.
 
-[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.2.1...main
+[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.3.0...main
+[0.3.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.3.0
 [0.2.1]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.2.1
 [0.1.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/v0.1.0

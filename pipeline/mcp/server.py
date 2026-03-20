@@ -121,7 +121,7 @@ def _handle_initialize(request: JsonRpcRequest) -> dict[str, Any]:
             },
             "serverInfo": {
                 "name": "unity-resource-rag-pipeline-mcp",
-                "version": "0.2.1",
+                "version": "0.3.0",
             },
             "instructions": "Use the Unity Resource RAG pipeline tools to extract layouts, bind assets, build handoff bundles, and verify screenshots.",
         },

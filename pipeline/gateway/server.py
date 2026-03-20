@@ -38,7 +38,7 @@ def _error_payload(
 
 
 class GatewayRequestHandler(BaseHTTPRequestHandler):
-    server_version = "UnityResourceRagGateway/0.2.1"
+    server_version = "UnityResourceRagGateway/0.3.0"
     router: GatewayCapabilityRouter = DEFAULT_ROUTER
 
     def _write_json(self, status_code: int, payload: dict[str, Any]) -> None:
