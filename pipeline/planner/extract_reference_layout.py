@@ -6,6 +6,8 @@ import base64
 import json
 import os
 import re
+import shlex
+import subprocess
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -59,7 +61,18 @@ class ProviderConfig:
     max_image_dim: int
     project_hints: list[str]
     api_key_env: str
+    auth_mode: str | None
+    oauth_token_env: str | None
+    oauth_token_file: str | None
+    oauth_token_command: str | None
     base_url: str | None
+
+
+@dataclass
+class ProviderAuth:
+    auth_mode: str
+    bearer_token: str | None
+    token_source: str
 
 
 def _die(message: str) -> None:
@@ -197,23 +210,128 @@ def normalize_plan(plan: ReferenceLayoutPlan, *, screen_name: str, image_meta: d
     return ReferenceLayoutPlan.model_validate(data)
 
 
+def _configured_auth_mode(config: ProviderConfig) -> str:
+    if config.auth_mode and config.auth_mode not in {"api_key", "oauth_token"}:
+        _die(f"Unsupported auth mode: {config.auth_mode}")
+    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command:
+        return "oauth_token"
+    if config.auth_mode:
+        return config.auth_mode
+    return "api_key"
+
+
+def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None]:
+    sources = [
+        ("env", config.oauth_token_env),
+        ("file", config.oauth_token_file),
+        ("command", config.oauth_token_command),
+    ]
+    configured = [(name, value) for name, value in sources if value]
+    if len(configured) > 1:
+        _die("Provide only one OAuth token source: --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
+    if not configured:
+        _die("OAuth token auth requires one of --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
+    return configured[0]
+
+
+def _read_token_from_file(path_value: str) -> str:
+    token = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    if not token:
+        _die(f"OAuth token file is empty: {path_value}")
+    return token
+
+
+def _has_readable_token_file(path_value: str | None) -> bool:
+    if not path_value:
+        return False
+
+    token_file = Path(path_value).expanduser()
+    if not token_file.exists() or not token_file.is_file():
+        return False
+
+    try:
+        return bool(token_file.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
+def _read_token_from_command(command: str) -> str:
+    argv = shlex.split(command)
+    if not argv:
+        _die("OAuth token command is empty.")
+
+    completed = subprocess.run(
+        argv,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        _die(f"OAuth token command failed with exit code {completed.returncode}.")
+    token = completed.stdout.strip()
+    if not token:
+        _die("OAuth token command returned an empty token.")
+    return token
+
+
+def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True) -> ProviderAuth:
+    auth_mode = _configured_auth_mode(config)
+    if auth_mode == "api_key":
+        token = os.getenv(config.api_key_env)
+        if require_token and not token:
+            _die(f"{config.api_key_env} is not set.")
+        return ProviderAuth(auth_mode="api_key", bearer_token=token, token_source="env")
+
+    token_source, source_value = _resolve_oauth_token_source(config)
+    token: str | None = None
+    if require_token:
+        if token_source == "env":
+            assert source_value is not None
+            token = os.getenv(source_value)
+            if not token:
+                _die(f"{source_value} is not set.")
+        elif token_source == "file":
+            assert source_value is not None
+            token = _read_token_from_file(source_value)
+        elif token_source == "command":
+            assert source_value is not None
+            token = _read_token_from_command(source_value)
+        else:
+            _die(f"Unsupported OAuth token source: {token_source}")
+
+    return ProviderAuth(auth_mode="oauth_token", bearer_token=token, token_source=token_source)
+
+
+def has_provider_auth(config: ProviderConfig) -> bool:
+    auth_mode = _configured_auth_mode(config)
+    if auth_mode == "api_key":
+        return bool(os.getenv(config.api_key_env))
+
+    token_source, source_value = _resolve_oauth_token_source(config)
+    if token_source == "env":
+        assert source_value is not None
+        return bool(os.getenv(source_value))
+    if token_source == "file":
+        return _has_readable_token_file(source_value)
+    return bool(source_value)
+
+
 def resolve_provider(config: ProviderConfig) -> str:
     if config.provider != "auto":
         return config.provider
-    return "openai" if os.getenv(config.api_key_env) else "local_heuristic"
+    return "openai" if has_provider_auth(config) else "local_heuristic"
 
 
-def create_openai_client(*, api_key_env: str, base_url: str | None):
+def create_openai_client(*, auth: ProviderAuth, base_url: str | None):
     try:
         from openai import OpenAI
     except ImportError:
         _die("openai SDK not installed. Install with `uv pip install openai`.")
 
-    api_key = os.getenv(api_key_env)
-    if not api_key:
-        _die(f"{api_key_env} is not set.")
+    if not auth.bearer_token:
+        _die("Resolved provider auth did not return a bearer token.")
 
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(api_key=auth.bearer_token, base_url=base_url)
 
 
 def extract_with_openai_like(
@@ -224,7 +342,8 @@ def extract_with_openai_like(
     base_url: str | None,
 ) -> tuple[ReferenceLayoutPlan, dict[str, Any]]:
     data_url, image_meta = encode_image_data_url(image_path, config.max_image_dim)
-    client = create_openai_client(api_key_env=config.api_key_env, base_url=base_url)
+    auth = resolve_provider_auth(config)
+    client = create_openai_client(auth=auth, base_url=base_url)
 
     response = client.responses.parse(
         model=config.model,
@@ -270,6 +389,8 @@ def extract_with_openai_like(
         "projectHints": config.project_hints,
         "baseUrl": base_url,
         "apiKeyEnv": config.api_key_env,
+        "authMode": auth.auth_mode,
+        "tokenSource": auth.token_source,
     }
     return plan, report
 
@@ -493,6 +614,9 @@ def dry_run_payload(
     }
 
     if resolved_provider in {"openai", "openai_compatible"}:
+        auth = resolve_provider_auth(config, require_token=False)
+        preview["authMode"] = auth.auth_mode
+        preview["tokenSource"] = auth.token_source
         preview["instructionsPreview"] = SYSTEM_PROMPT
         preview["userPromptPreview"] = build_user_prompt(
             screen_name=config.screen_name,
@@ -522,7 +646,11 @@ def main() -> int:
     parser.add_argument("--screen-name", help="Screen name override. Defaults to the image file stem.")
     parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default=DEFAULT_PROVIDER, help=f"Extraction provider. Default: {DEFAULT_PROVIDER}")
     parser.add_argument("--provider-base-url", help="Base URL for openai_compatible providers.")
-    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key.")
+    parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable that stores the provider API key. Used for backward-compatible api_key auth.")
+    parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed providers. Defaults to api_key unless any OAuth input is provided.")
+    parser.add_argument("--oauth-token-env", help="Environment variable that stores an OAuth bearer token.")
+    parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
+    parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
@@ -544,6 +672,10 @@ def main() -> int:
         max_image_dim=args.max_image_dim,
         project_hints=args.hint,
         api_key_env=args.provider_api_key_env,
+        auth_mode=args.auth_mode,
+        oauth_token_env=args.oauth_token_env,
+        oauth_token_file=args.oauth_token_file,
+        oauth_token_command=args.oauth_token_command,
         base_url=args.provider_base_url,
     )
 
