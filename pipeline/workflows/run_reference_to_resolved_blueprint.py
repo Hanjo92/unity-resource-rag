@@ -107,6 +107,10 @@ def main() -> int:
     parser.add_argument("--provider", default="auto", help="Extraction provider: auto, openai, openai_compatible, or local_heuristic.")
     parser.add_argument("--provider-base-url", help="Base URL for openai_compatible extraction providers.")
     parser.add_argument("--provider-api-key-env", default="OPENAI_API_KEY", help="Environment variable name for the extraction provider API key.")
+    parser.add_argument("--auth-mode", choices=["api_key", "oauth_token"], help="Authentication mode for API-backed extraction providers.")
+    parser.add_argument("--oauth-token-env", help="Environment variable name for an OAuth bearer token.")
+    parser.add_argument("--oauth-token-file", help="File path containing an OAuth bearer token.")
+    parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout.")
     parser.add_argument("--model", default="gpt-4.1-mini", help="Extraction model.")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default="high", help="Image detail hint for extraction.")
     parser.add_argument("--max-image-dim", type=int, default=1600, help="Maximum width/height sent to extraction.")
@@ -168,6 +172,14 @@ def main() -> int:
             command.extend(["--screen-name", args.screen_name])
         if args.provider_base_url:
             command.extend(["--provider-base-url", args.provider_base_url])
+        if args.auth_mode:
+            command.extend(["--auth-mode", args.auth_mode])
+        if args.oauth_token_env:
+            command.extend(["--oauth-token-env", args.oauth_token_env])
+        if args.oauth_token_file:
+            command.extend(["--oauth-token-file", args.oauth_token_file])
+        if args.oauth_token_command:
+            command.extend(["--oauth-token-command", args.oauth_token_command])
         for hint in args.hint:
             command.extend(["--hint", hint])
         if args.safe_area_component_type:
