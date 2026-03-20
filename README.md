@@ -150,6 +150,35 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --codex-auth-file /custom/path/to/auth.json
 ```
 
+### MCP preset 예시
+
+MCP tool에서는 처음 설정할 때 저수준 인증 필드를 직접 채우기보다 `connection_preset`을 먼저 고르는 것을 권장한다.
+
+- `recommended_auto`: 권장값. 가능한 인증을 자동 선택
+- `codex_oauth`: Codex OAuth로 OpenAI 연결
+- `openai_api_key`: `OPENAI_API_KEY`
+- `gemini_api_key`: `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`
+- `google_oauth`: `GOOGLE_OAUTH_ACCESS_TOKEN` 또는 `gcloud` access token
+- `claude_api_key`: `ANTHROPIC_API_KEY`
+- `claude_code`: `ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json`
+- `custom_openai_compatible`: 별도 OpenAI-compatible endpoint
+- `offline_local`: `local_heuristic` 전용
+
+예를 들어 MCP client에서 workflow tool을 호출할 때는 다음처럼 시작하면 된다.
+
+```json
+{
+  "tool": "unity_rag.run_reference_to_resolved_blueprint",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "catalog": "/absolute/path/to/resource_catalog.jsonl",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+커스텀 endpoint가 필요할 때만 `provider_base_url` 같은 고급 설정을 함께 넣는다. 대부분의 사용자는 CLI든 MCP든 기본값 또는 `auto`/`recommended_auto`만으로 시작하면 된다.
+
 ## 문서 바로가기
 
 ### 핵심 문서
