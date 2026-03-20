@@ -25,6 +25,17 @@ DEFAULT_DETAIL = "high"
 DEFAULT_MAX_IMAGE_DIM = 1600
 DEFAULT_PROVIDER = "auto"
 SUPPORTED_PROVIDERS = ("auto", "openai", "openai_compatible", "local_heuristic")
+DEFAULT_CODEX_AUTH_FILE = "auth.json"
+CODEX_TOKEN_KEY_CANDIDATES = (
+    ("access_token",),
+    ("accessToken",),
+    ("tokens", "access_token"),
+    ("tokens", "accessToken"),
+    ("credentials", "access_token"),
+    ("credentials", "accessToken"),
+    ("auth", "access_token"),
+    ("auth", "accessToken"),
+)
 
 
 SYSTEM_PROMPT = """
@@ -65,6 +76,7 @@ class ProviderConfig:
     oauth_token_env: str | None
     oauth_token_file: str | None
     oauth_token_command: str | None
+    codex_auth_file: str | None
     base_url: str | None
 
 
@@ -213,11 +225,41 @@ def normalize_plan(plan: ReferenceLayoutPlan, *, screen_name: str, image_meta: d
 def _configured_auth_mode(config: ProviderConfig) -> str:
     if config.auth_mode and config.auth_mode not in {"api_key", "oauth_token"}:
         _die(f"Unsupported auth mode: {config.auth_mode}")
-    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command:
+    if config.oauth_token_env or config.oauth_token_file or config.oauth_token_command or config.codex_auth_file:
         return "oauth_token"
     if config.auth_mode:
         return config.auth_mode
+    if os.getenv(config.api_key_env):
+        return "api_key"
+    if _has_readable_codex_auth_file(None):
+        return "oauth_token"
     return "api_key"
+
+
+def _default_codex_auth_file() -> Path:
+    codex_home = os.getenv("CODEX_HOME")
+    base_dir = Path(codex_home).expanduser() if codex_home else Path.home() / ".codex"
+    return base_dir / DEFAULT_CODEX_AUTH_FILE
+
+
+def _extract_nested_string(payload: Any, key_path: tuple[str, ...]) -> str | None:
+    current = payload
+    for key in key_path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    if isinstance(current, str):
+        token = current.strip()
+        return token or None
+    return None
+
+
+def _extract_codex_access_token(payload: Any) -> str | None:
+    for key_path in CODEX_TOKEN_KEY_CANDIDATES:
+        token = _extract_nested_string(payload, key_path)
+        if token:
+            return token
+    return None
 
 
 def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None]:
@@ -225,13 +267,19 @@ def _resolve_oauth_token_source(config: ProviderConfig) -> tuple[str, str | None
         ("env", config.oauth_token_env),
         ("file", config.oauth_token_file),
         ("command", config.oauth_token_command),
+        ("codex_file", config.codex_auth_file),
     ]
     configured = [(name, value) for name, value in sources if value]
     if len(configured) > 1:
-        _die("Provide only one OAuth token source: --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
-    if not configured:
-        _die("OAuth token auth requires one of --oauth-token-env, --oauth-token-file, or --oauth-token-command.")
-    return configured[0]
+        _die("Provide only one OAuth token source: --oauth-token-env, --oauth-token-file, --oauth-token-command, or --codex-auth-file.")
+    if configured:
+        return configured[0]
+
+    default_codex_auth_file = _default_codex_auth_file()
+    if _has_readable_codex_auth_file(str(default_codex_auth_file)):
+        return ("codex_file", str(default_codex_auth_file))
+
+    _die("OAuth token auth requires --oauth-token-env, --oauth-token-file, --oauth-token-command, or a readable Codex auth file (default: ~/.codex/auth.json).")
 
 
 def _read_token_from_file(path_value: str) -> str:
@@ -252,6 +300,30 @@ def _has_readable_token_file(path_value: str | None) -> bool:
     try:
         return bool(token_file.read_text(encoding="utf-8").strip())
     except OSError:
+        return False
+
+
+def _read_token_from_codex_auth_file(path_value: str | None) -> str:
+    auth_file = Path(path_value).expanduser() if path_value else _default_codex_auth_file()
+    try:
+        payload = json.loads(auth_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        _die(f"Codex auth file not found: {auth_file}")
+    except json.JSONDecodeError as exc:
+        _die(f"Codex auth file is not valid JSON: {auth_file} ({exc})")
+    except OSError as exc:
+        _die(f"Failed to read Codex auth file: {auth_file} ({exc})")
+
+    token = _extract_codex_access_token(payload)
+    if not token:
+        _die(f"Codex auth file does not contain an access token: {auth_file}")
+    return token
+
+
+def _has_readable_codex_auth_file(path_value: str | None) -> bool:
+    try:
+        return bool(_read_token_from_codex_auth_file(path_value))
+    except SystemExit:
         return False
 
 
@@ -296,6 +368,8 @@ def resolve_provider_auth(config: ProviderConfig, *, require_token: bool = True)
         elif token_source == "command":
             assert source_value is not None
             token = _read_token_from_command(source_value)
+        elif token_source == "codex_file":
+            token = _read_token_from_codex_auth_file(source_value)
         else:
             _die(f"Unsupported OAuth token source: {token_source}")
 
@@ -313,6 +387,8 @@ def has_provider_auth(config: ProviderConfig) -> bool:
         return bool(os.getenv(source_value))
     if token_source == "file":
         return _has_readable_token_file(source_value)
+    if token_source == "codex_file":
+        return _has_readable_codex_auth_file(source_value)
     return bool(source_value)
 
 
@@ -651,6 +727,7 @@ def main() -> int:
     parser.add_argument("--oauth-token-env", help="Environment variable that stores an OAuth bearer token.")
     parser.add_argument("--oauth-token-file", help="File path that contains an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout. Use shell wrapping explicitly if needed, e.g. `bash -lc ...`.")
+    parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file. Defaults to $CODEX_HOME/auth.json or ~/.codex/auth.json when available.")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use for API-backed providers. Default: {DEFAULT_MODEL}")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default=DEFAULT_DETAIL, help="Image detail hint for API-backed providers.")
     parser.add_argument("--max-image-dim", type=int, default=DEFAULT_MAX_IMAGE_DIM, help="Maximum width/height sent to extraction or heuristic analysis.")
@@ -676,6 +753,7 @@ def main() -> int:
         oauth_token_env=args.oauth_token_env,
         oauth_token_file=args.oauth_token_file,
         oauth_token_command=args.oauth_token_command,
+        codex_auth_file=args.codex_auth_file,
         base_url=args.provider_base_url,
     )
 

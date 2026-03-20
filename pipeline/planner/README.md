@@ -29,8 +29,9 @@ python3 pipeline/planner/extract_reference_layout.py \
 
 provider 메모:
 
-- `auto`: 기본적으로 `OPENAI_API_KEY`가 있으면 `openai`, 없으면 `local_heuristic`
-- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`)이 있으면 `provider_api_key_env`보다 OAuth 설정이 우선된다
+- `auto`: 기본적으로 `OPENAI_API_KEY` 또는 Codex OAuth auth file이 있으면 `openai`, 둘 다 없으면 `local_heuristic`
+- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`)이 있으면 `provider_api_key_env`보다 OAuth 설정이 우선된다
+- 명시적인 OAuth 입력이 없어도 `$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`에 Codex 로그인 토큰이 있으면 `auto`가 `openai`를 선택한다
 - `local_heuristic`: 키 없이 동작하는 로컬 fallback
 - `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용
 
@@ -49,6 +50,16 @@ python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --provider openai \
   --oauth-token-env OPENAI_OAUTH_TOKEN
+```
+
+Codex auth 파일 예시:
+
+```bash
+python3 pipeline/planner/extract_reference_layout.py \
+  /absolute/path/to/reference.png \
+  --provider openai \
+  --auth-mode oauth_token \
+  --codex-auth-file ~/.codex/auth.json
 ```
 
 예시:

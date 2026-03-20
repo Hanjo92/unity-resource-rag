@@ -111,6 +111,7 @@ def main() -> int:
     parser.add_argument("--oauth-token-env", help="Environment variable name for an OAuth bearer token.")
     parser.add_argument("--oauth-token-file", help="File path containing an OAuth bearer token.")
     parser.add_argument("--oauth-token-command", help="Command that prints an OAuth bearer token to stdout.")
+    parser.add_argument("--codex-auth-file", help="Path to a Codex OAuth auth.json file.")
     parser.add_argument("--model", default="gpt-4.1-mini", help="Extraction model.")
     parser.add_argument("--detail", choices=["low", "high", "auto"], default="high", help="Image detail hint for extraction.")
     parser.add_argument("--max-image-dim", type=int, default=1600, help="Maximum width/height sent to extraction.")
@@ -180,6 +181,8 @@ def main() -> int:
             command.extend(["--oauth-token-file", args.oauth_token_file])
         if args.oauth_token_command:
             command.extend(["--oauth-token-command", args.oauth_token_command])
+        if args.codex_auth_file:
+            command.extend(["--codex-auth-file", args.codex_auth_file])
         for hint in args.hint:
             command.extend(["--hint", hint])
         if args.safe_area_component_type:
