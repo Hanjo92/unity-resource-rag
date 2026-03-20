@@ -39,6 +39,14 @@ provider 메모:
 - `claude_code`: Anthropic OpenAI-compatible endpoint + Claude Code bearer preset (`ANTHROPIC_AUTH_TOKEN` 또는 `~/.claude/.credentials.json`)
 - `openai_compatible`: OpenAI-compatible Responses API를 제공하는 다른 서비스에 연결할 때 사용
 
+MCP tool preset 메모:
+
+- planner extractor를 MCP tool `unity_rag.extract_reference_layout`로 호출할 때는 처음 설정용으로 `connection_preset`을 먼저 고르는 것을 권장한다
+- 권장 시작값은 `connection_preset=recommended_auto`
+- Codex OAuth는 `codex_oauth`, OpenAI 키는 `openai_api_key`, Gemini 키는 `gemini_api_key`, Google OAuth는 `google_oauth`, Claude API key는 `claude_api_key`, Claude Code는 `claude_code`, 완전 로컬은 `offline_local`
+- `custom_openai_compatible`만 `provider_base_url` 같은 고급 설정을 추가로 채우면 된다
+- `connection_preset`이 있으면 MCP handler 내부에서 `provider`, `auth_mode`, 관련 env/file 기본값으로 변환되고 preset이 우선 적용된다
+
 키 없이 요청 구조만 확인하려면:
 
 ```bash

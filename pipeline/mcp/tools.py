@@ -12,6 +12,59 @@ from typing import Any, Callable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_ROOT = REPO_ROOT / "pipeline"
 
+PROVIDER_DESCRIPTION = (
+    "추출 provider 선택. "
+    "`auto`: 권장값, 감지 가능한 인증을 자동 선택. "
+    "`openai`: OpenAI API key 또는 Codex OAuth 사용. "
+    "`gemini`: Google API key 사용. "
+    "`antigravity`: Google OAuth/gcloud 토큰 사용. "
+    "`claude`: Anthropic API key 사용. "
+    "`claude_code`: Claude Code credential 사용. "
+    "`openai_compatible`: 사용자 지정 OpenAI-compatible endpoint 사용. "
+    "`local_heuristic`: 완전 로컬 fallback."
+)
+
+ADVANCED_SETTING_SUFFIX = "고급 설정. 대부분의 사용자는 비워두고 `provider=auto`만 선택하면 됨."
+
+CONNECTION_PRESET_DESCRIPTION = (
+    "초기 연결 설정용 프리셋. "
+    "`recommended_auto`: 권장값, 감지 가능한 인증을 자동 선택. "
+    "`codex_oauth`: Codex OAuth로 OpenAI 연결. "
+    "`openai_api_key`: OPENAI_API_KEY로 OpenAI 연결. "
+    "`gemini_api_key`: GEMINI_API_KEY 또는 GOOGLE_API_KEY로 Gemini 연결. "
+    "`google_oauth`: GOOGLE_OAUTH_ACCESS_TOKEN 또는 gcloud 토큰으로 Google OAuth 연결. "
+    "`claude_api_key`: ANTHROPIC_API_KEY로 Claude 연결. "
+    "`claude_code`: ANTHROPIC_AUTH_TOKEN 또는 Claude Code credential로 연결. "
+    "`custom_openai_compatible`: 사용자 지정 OpenAI-compatible endpoint 연결. "
+    "`offline_local`: 네트워크 없이 local heuristic만 사용. "
+    "프리셋이 지정되면 같은 범주의 저수준 provider/auth 입력보다 프리셋이 우선한다."
+)
+
+PROVIDER_ENUM = ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic"]
+CONNECTION_PRESET_ENUM = [
+    "recommended_auto",
+    "codex_oauth",
+    "openai_api_key",
+    "gemini_api_key",
+    "google_oauth",
+    "claude_api_key",
+    "claude_code",
+    "custom_openai_compatible",
+    "offline_local",
+]
+
+CONNECTION_PRESET_DEFAULTS: dict[str, dict[str, str]] = {
+    "recommended_auto": {"provider": "auto"},
+    "codex_oauth": {"provider": "openai", "auth_mode": "oauth_token"},
+    "openai_api_key": {"provider": "openai", "auth_mode": "api_key"},
+    "gemini_api_key": {"provider": "gemini", "auth_mode": "api_key"},
+    "google_oauth": {"provider": "antigravity", "auth_mode": "oauth_token"},
+    "claude_api_key": {"provider": "claude", "auth_mode": "api_key"},
+    "claude_code": {"provider": "claude_code", "auth_mode": "oauth_token"},
+    "custom_openai_compatible": {"provider": "openai_compatible", "auth_mode": "api_key"},
+    "offline_local": {"provider": "local_heuristic"},
+}
+
 
 @dataclass(frozen=True)
 class ToolSpec:
@@ -80,6 +133,24 @@ def _require_path(args: dict[str, Any], name: str) -> str:
     return str(value)
 
 
+def _advanced_description(base: str) -> str:
+    return f"{base} {ADVANCED_SETTING_SUFFIX}"
+
+
+def _apply_connection_preset(args: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(args)
+    preset = normalized.get("connection_preset")
+    if not preset:
+        return normalized
+
+    defaults = CONNECTION_PRESET_DEFAULTS.get(str(preset))
+    if defaults is None:
+        raise ToolExecutionError(f"Unsupported connection_preset: {preset}.")
+
+    normalized.update(defaults)
+    return normalized
+
+
 def _build_extract_reference_layout_schema() -> dict[str, Any]:
     return {
         "type": "object",
@@ -88,14 +159,15 @@ def _build_extract_reference_layout_schema() -> dict[str, Any]:
             "output": {"type": "string", "description": "Optional output path for the reference layout JSON."},
             "report": {"type": "string", "description": "Optional output path for the extraction report JSON."},
             "screen_name": {"type": "string"},
-            "provider": {"type": "string", "enum": ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic"]},
-            "provider_base_url": {"type": "string"},
-            "provider_api_key_env": {"type": "string"},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"]},
-            "oauth_token_env": {"type": "string"},
-            "oauth_token_file": {"type": "string"},
-            "oauth_token_command": {"type": "string"},
-            "codex_auth_file": {"type": "string"},
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -119,14 +191,15 @@ def _build_run_reference_to_resolved_blueprint_schema() -> dict[str, Any]:
             "vector_index": {"type": "string"},
             "output_dir": {"type": "string"},
             "screen_name": {"type": "string"},
-            "provider": {"type": "string", "enum": ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "local_heuristic"]},
-            "provider_base_url": {"type": "string"},
-            "provider_api_key_env": {"type": "string"},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"]},
-            "oauth_token_env": {"type": "string"},
-            "oauth_token_file": {"type": "string"},
-            "oauth_token_command": {"type": "string"},
-            "codex_auth_file": {"type": "string"},
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -203,6 +276,7 @@ def _format_tool_error(message: str, details: dict[str, Any] | None = None) -> d
 
 
 def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
     script_path = _script_path("planner", "extract_reference_layout.py")
     command = [
         _require_path(args, "image"),
@@ -241,6 +315,7 @@ def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
     script_path = _script_path("workflows", "run_reference_to_resolved_blueprint.py")
     opts: list[str] = []
 
@@ -318,13 +393,13 @@ def build_mcp_handoff_bundle(args: dict[str, Any]) -> dict[str, Any]:
 TOOLS: list[ToolSpec] = [
     ToolSpec(
         name="unity_rag.extract_reference_layout",
-        description="Extract a reference layout plan JSON from a reference image using the configured provider. Falls back to a local heuristic provider when no API key is available.",
+        description="레퍼런스 이미지에서 reference layout plan JSON을 추출한다. 처음 설정할 때는 `connection_preset=recommended_auto`를 고르는 것이 권장되고, Codex OAuth를 확실히 쓰고 싶으면 `codex_oauth`, 완전 오프라인 점검이면 `offline_local`을 고르면 된다.",
         input_schema=_build_extract_reference_layout_schema(),
         handler=extract_reference_layout,
     ),
     ToolSpec(
         name="unity_rag.run_reference_to_resolved_blueprint",
-        description="Run the full reference-image or reference-layout workflow through template generation, vector indexing, asset binding, and MCP handoff bundle creation.",
+        description="레퍼런스 이미지 또는 기존 reference layout에서 시작해 resolved blueprint와 MCP handoff bundle까지 전체 workflow를 실행한다. 처음 설정할 때는 `connection_preset=recommended_auto`를 권장하며, OpenAI 키는 `openai_api_key`, Gemini 키는 `gemini_api_key`, Claude는 `claude_api_key` 또는 `claude_code`를 고르면 된다.",
         input_schema=_build_run_reference_to_resolved_blueprint_schema(),
         handler=run_reference_to_resolved_blueprint,
     ),

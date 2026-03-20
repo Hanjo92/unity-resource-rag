@@ -52,6 +52,14 @@ provider 메모:
 - `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`: 다른 OpenAI-compatible 서비스로 확장
 - workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`를 그대로 전달한다
 
+MCP tool preset 메모:
+
+- 처음 설정할 때는 CLI 저수준 플래그를 MCP에서 그대로 노출하기보다 `connection_preset`을 먼저 고르는 것을 권장한다
+- 권장 시작값은 `connection_preset=recommended_auto`
+- Codex OAuth는 `codex_oauth`, OpenAI 키는 `openai_api_key`, Gemini 키는 `gemini_api_key`, Google OAuth는 `google_oauth`, Claude API key는 `claude_api_key`, Claude Code는 `claude_code`, 완전 로컬은 `offline_local`
+- `custom_openai_compatible`만 `provider_base_url` 같은 고급 설정을 추가로 채우면 된다
+- `connection_preset`과 저수준 필드를 함께 넘기면 preset이 우선하지만, 고급 커스텀 입력은 계속 지원한다
+
 적용 후 screenshot이 생기면 [pipeline/verification/README.md](../verification/README.md)의 repair loop를 이어서 돌릴 수 있다.
 
 MCP handoff bundle 예제는 [sample-mcp-handoff-bundle.json](../../examples/mcp/sample-mcp-handoff-bundle.json)과 [end-to-end-usage.md](../../examples/mcp/end-to-end-usage.md)를 참고하면 된다.
