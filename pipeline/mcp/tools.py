@@ -95,6 +95,7 @@ def _build_extract_reference_layout_schema() -> dict[str, Any]:
             "oauth_token_env": {"type": "string"},
             "oauth_token_file": {"type": "string"},
             "oauth_token_command": {"type": "string"},
+            "codex_auth_file": {"type": "string"},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -125,6 +126,7 @@ def _build_run_reference_to_resolved_blueprint_schema() -> dict[str, Any]:
             "oauth_token_env": {"type": "string"},
             "oauth_token_file": {"type": "string"},
             "oauth_token_command": {"type": "string"},
+            "codex_auth_file": {"type": "string"},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
             "max_image_dim": {"type": "integer", "minimum": 1},
@@ -217,6 +219,7 @@ def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
         ("oauth_token_env", "--oauth-token-env"),
         ("oauth_token_file", "--oauth-token-file"),
         ("oauth_token_command", "--oauth-token-command"),
+        ("codex_auth_file", "--codex-auth-file"),
         ("model", "--model"),
         ("detail", "--detail"),
         ("max_image_dim", "--max-image-dim"),
@@ -258,6 +261,7 @@ def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
         ("oauth_token_env", "--oauth-token-env"),
         ("oauth_token_file", "--oauth-token-file"),
         ("oauth_token_command", "--oauth-token-command"),
+        ("codex_auth_file", "--codex-auth-file"),
         ("model", "--model"),
         ("detail", "--detail"),
         ("max_image_dim", "--max-image-dim"),
@@ -339,4 +343,3 @@ TOOLS: list[ToolSpec] = [
 ]
 
 TOOL_BY_NAME = {tool.name: tool for tool in TOOLS}
-

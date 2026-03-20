@@ -42,10 +42,11 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
 provider 메모:
 
 - `--provider auto`: 기본적으로 키가 있으면 API provider, 없으면 `local_heuristic`
-- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`)을 주면 `--provider-api-key-env`보다 OAuth 설정이 우선된다
+- OAuth 입력(`--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`)을 주면 `--provider-api-key-env`보다 OAuth 설정이 우선된다
+- 명시적인 OAuth 입력이 없어도 `$CODEX_HOME/auth.json` 또는 `~/.codex/auth.json`에 Codex 로그인 토큰이 있으면 `--provider auto`가 OpenAI provider를 계속 사용할 수 있다
 - `--provider local_heuristic`: 완전 로컬 fallback
 - `--provider openai_compatible --provider-base-url ... --provider-api-key-env ...`: 다른 OpenAI-compatible 서비스로 확장
-- workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`를 그대로 전달한다
+- workflow runner도 extractor와 동일하게 `--auth-mode`, `--oauth-token-env`, `--oauth-token-file`, `--oauth-token-command`, `--codex-auth-file`를 그대로 전달한다
 
 적용 후 screenshot이 생기면 [pipeline/verification/README.md](../verification/README.md)의 repair loop를 이어서 돌릴 수 있다.
 
