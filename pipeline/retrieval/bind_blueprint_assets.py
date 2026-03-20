@@ -10,6 +10,12 @@ from search_catalog import Query, resolve_vector_index_path, search
 from vector_index import load_jsonl, load_vector_index, score_query_against_index
 
 
+BINDING_STATE_AUTO_BIND = "auto_bind"
+BINDING_STATE_HOLD = "hold"
+BINDING_STATE_REVIEW_NEEDED = "review_needed"
+HOLD_BINDING_POLICIES = {"hold_if_uncertain", "preserve_candidates"}
+
+
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -81,21 +87,66 @@ def build_asset_reference(candidate: dict[str, Any], forced_kind: str | None = N
     }
 
 
-def select_candidate(query_spec: dict[str, Any], results: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
-    if not results:
-        return None, "no_candidates"
-
-    top = results[0]
+def select_candidate(query_spec: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Any]:
     binding_policy = (query_spec.get("bindingPolicy") or "require_confident").lower()
     min_score = float(query_spec.get("minScore") or 0.55)
 
+    if not results:
+        return {
+            "bindingState": BINDING_STATE_REVIEW_NEEDED,
+            "bindingDecision": "no_candidates",
+            "selectedCandidate": None,
+            "appliedCandidate": None,
+            "topScore": None,
+            "minScore": min_score,
+            "shouldBind": False,
+        }
+
+    top = results[0]
+    top_score = float(top.get("score", 0.0))
+
     if binding_policy == "best_match":
-        return top, "best_match"
+        return {
+            "bindingState": BINDING_STATE_AUTO_BIND,
+            "bindingDecision": "best_match",
+            "selectedCandidate": top,
+            "appliedCandidate": top,
+            "topScore": top_score,
+            "minScore": min_score,
+            "shouldBind": True,
+        }
 
-    if top.get("score", 0.0) >= min_score:
-        return top, "confident_match"
+    if top_score >= min_score:
+        return {
+            "bindingState": BINDING_STATE_AUTO_BIND,
+            "bindingDecision": "confident_match",
+            "selectedCandidate": top,
+            "appliedCandidate": top,
+            "topScore": top_score,
+            "minScore": min_score,
+            "shouldBind": True,
+        }
 
-    return None, f"low_confidence:{top.get('score', 0.0):.4f}<{min_score:.4f}"
+    if binding_policy in HOLD_BINDING_POLICIES:
+        return {
+            "bindingState": BINDING_STATE_HOLD,
+            "bindingDecision": f"low_confidence_hold:{top_score:.4f}<{min_score:.4f}",
+            "selectedCandidate": top,
+            "appliedCandidate": None,
+            "topScore": top_score,
+            "minScore": min_score,
+            "shouldBind": False,
+        }
+
+    return {
+        "bindingState": BINDING_STATE_REVIEW_NEEDED,
+        "bindingDecision": f"low_confidence_review:{top_score:.4f}<{min_score:.4f}",
+        "selectedCandidate": top,
+        "appliedCandidate": None,
+        "topScore": top_score,
+        "minScore": min_score,
+        "shouldBind": False,
+    }
 
 
 def resolve_query(
@@ -104,14 +155,18 @@ def resolve_query(
     target: str,
     records: list[dict[str, Any]],
     vector_index: dict[str, Any] | None,
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]], Query, str]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], Query]:
     query = build_query(query_spec, node, target)
     vector_scores = None
     if vector_index is not None:
         vector_scores = score_query_against_index(query.query_text, vector_index)
     results = search(query, records, vector_scores)
-    chosen, decision = select_candidate(query_spec, results)
-    return chosen, results, query, decision
+    selection = select_candidate(query_spec, results)
+    return selection, results, query
+
+
+def _count_binding_state(summary: dict[str, int], state: str) -> None:
+    summary[state] = summary.get(state, 0) + 1
 
 
 def bind_blueprint(
@@ -126,6 +181,14 @@ def bind_blueprint(
         "screenName": resolved.get("screenName"),
         "bindings": [],
         "issues": [],
+        "summary": {
+            "bindingStates": {
+                BINDING_STATE_AUTO_BIND: 0,
+                BINDING_STATE_HOLD: 0,
+                BINDING_STATE_REVIEW_NEEDED: 0,
+            },
+            "bindingCount": 0,
+        },
     }
     has_errors = False
 
@@ -137,7 +200,7 @@ def bind_blueprint(
 
         asset_query = node.pop("assetQuery", None)
         if isinstance(asset_query, dict):
-            chosen, results, query, decision = resolve_query(asset_query, node, "asset", records, vector_index)
+            selection, results, query = resolve_query(asset_query, node, "asset", records, vector_index)
             entry = {
                 "nodeId": node.get("id"),
                 "nodeName": node.get("name"),
@@ -149,29 +212,36 @@ def bind_blueprint(
                     "preferredKind": query.preferred_kind,
                     "aspectRatio": query.aspect_ratio,
                 },
-                "decision": decision,
-                "chosenCandidate": chosen,
+                "bindingPolicy": (asset_query.get("bindingPolicy") or "require_confident"),
+                "bindingState": selection["bindingState"],
+                "bindingDecision": selection["bindingDecision"],
+                "topScore": selection["topScore"],
+                "minScore": selection["minScore"],
+                "chosenCandidate": selection["selectedCandidate"],
+                "appliedCandidate": selection["appliedCandidate"],
                 "alternatives": results[:3],
             }
-            if chosen:
-                node["asset"] = build_asset_reference(chosen)
+            if selection["shouldBind"]:
+                node["asset"] = build_asset_reference(selection["appliedCandidate"])
             else:
-                has_errors = True
                 node["assetQuery"] = asset_query
-                report["issues"].append({
-                    "severity": "error",
-                    "nodeId": node.get("id"),
-                    "nodeName": node.get("name"),
-                    "target": "asset",
-                    "message": f"Could not resolve asset query for {current_path}: {decision}",
-                })
+                if selection["bindingState"] == BINDING_STATE_REVIEW_NEEDED:
+                    has_errors = True
+                    report["issues"].append({
+                        "severity": "error",
+                        "nodeId": node.get("id"),
+                        "nodeName": node.get("name"),
+                        "target": "asset",
+                        "message": f"Could not resolve asset query for {current_path}: {selection['bindingDecision']}",
+                    })
             report["bindings"].append(entry)
+            _count_binding_state(report["summary"]["bindingStates"], selection["bindingState"])
 
         text = node.get("text")
         if isinstance(text, dict):
             font_query = text.pop("fontAssetQuery", None)
             if isinstance(font_query, dict):
-                chosen, results, query, decision = resolve_query(font_query, node, "fontAsset", records, vector_index)
+                selection, results, query = resolve_query(font_query, node, "fontAsset", records, vector_index)
                 entry = {
                     "nodeId": node.get("id"),
                     "nodeName": node.get("name"),
@@ -183,23 +253,30 @@ def bind_blueprint(
                         "preferredKind": query.preferred_kind,
                         "aspectRatio": query.aspect_ratio,
                     },
-                    "decision": decision,
-                    "chosenCandidate": chosen,
+                    "bindingPolicy": (font_query.get("bindingPolicy") or "require_confident"),
+                    "bindingState": selection["bindingState"],
+                    "bindingDecision": selection["bindingDecision"],
+                    "topScore": selection["topScore"],
+                    "minScore": selection["minScore"],
+                    "chosenCandidate": selection["selectedCandidate"],
+                    "appliedCandidate": selection["appliedCandidate"],
                     "alternatives": results[:3],
                 }
-                if chosen:
-                    text["fontAsset"] = build_asset_reference(chosen, forced_kind="tmp_font")
+                if selection["shouldBind"]:
+                    text["fontAsset"] = build_asset_reference(selection["appliedCandidate"], forced_kind="tmp_font")
                 else:
-                    has_errors = True
                     text["fontAssetQuery"] = font_query
-                    report["issues"].append({
-                        "severity": "error",
-                        "nodeId": node.get("id"),
-                        "nodeName": node.get("name"),
-                        "target": "fontAsset",
-                        "message": f"Could not resolve font query for {current_path}: {decision}",
-                    })
+                    if selection["bindingState"] == BINDING_STATE_REVIEW_NEEDED:
+                        has_errors = True
+                        report["issues"].append({
+                            "severity": "error",
+                            "nodeId": node.get("id"),
+                            "nodeName": node.get("name"),
+                            "target": "fontAsset",
+                            "message": f"Could not resolve font query for {current_path}: {selection['bindingDecision']}",
+                        })
                 report["bindings"].append(entry)
+                _count_binding_state(report["summary"]["bindingStates"], selection["bindingState"])
 
         for child in node.get("children") or []:
             if isinstance(child, dict):
@@ -215,6 +292,7 @@ def bind_blueprint(
             "message": "Blueprint root is missing or invalid.",
         })
 
+    report["summary"]["bindingCount"] = len(report["bindings"])
     return resolved, report, has_errors
 
 

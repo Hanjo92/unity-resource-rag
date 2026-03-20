@@ -12,3 +12,20 @@ Conventions:
 - keep JSON camelCase to match the rest of the repository
 - keep sample reports small enough to use as schema fixtures in tests
 
+Runner entrypoints:
+
+- `python3 -m pipeline.evaluation.run_retrieval_benchmark <suite-manifest> <result-payload>`
+- `python3 -m pipeline.evaluation.run_screen_benchmark <suite-manifest> <report-payload>`
+
+Retrieval runners expect a file with `schemaVersion`, `benchmarkName`, `projectName`, `generatedAtUtc`, and a `screens` array. Each screen entry should include `screenName` and a `regions` array with `regionId`, `top1HitRate`, `top3HitRate`, and an optional `selectedCandidateScore`.
+
+Screen runners expect a benchmark report shaped like `sample-benchmark-report.json`, then compare each screen result against fixture thresholds and verification metrics.
+
+Both runners emit deterministic scorecards with:
+
+- `kind`
+- `summary`
+- `screenChecks`
+- `hasErrors`
+
+The default output filename is derived from the input payload name and ends in `.retrieval-scorecard.json` or `.screen-scorecard.json`.

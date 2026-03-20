@@ -41,6 +41,9 @@ python3 pipeline/retrieval/bind_blueprint_assets.py \
 
 `search_catalog.py`는 같은 폴더에 `resource_vector_index.json`이 있으면 자동으로 읽고, 없으면 기존 lexical 모드로 fallback 한다.
 `bind_blueprint_assets.py`는 blueprint template 안의 query를 실제 `asset` / `text.fontAsset` 참조로 치환하고, 별도 binding report를 남긴다.
+confidence가 충분하면 `auto_bind`, 애매하지만 보류하고 싶으면 `hold_if_uncertain` 또는 `preserve_candidates`, 기준 미달이면 `review_needed`로 떨어진다.
+`hold`와 `review_needed`는 resolved blueprint에 원래 query block을 다시 남기고, binding report의 `summary.bindingStates`와 각 binding entry의 `bindingState`로 구분된다.
+`auto_bind`만 query를 제거하고 실제 Unity asset reference를 쓴다.
 
 이 binding report와 resolved blueprint는 [mcp-sidecar-contract.md](../../specs/mcp-sidecar-contract.md)에서 정의한 MCP handoff bundle의 입력이다.
 
