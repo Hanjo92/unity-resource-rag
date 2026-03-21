@@ -20,7 +20,7 @@ python3 -m pipeline.gateway
 기본 바인딩:
 
 - host: `127.0.0.1`
-- port: `8080`
+- port: `8090`
 
 환경변수:
 
@@ -29,6 +29,8 @@ python3 -m pipeline.gateway
 - `UNITY_RESOURCE_RAG_GATEWAY_TOKEN`
 
 `UNITY_RESOURCE_RAG_GATEWAY_TOKEN`이 설정되면 `Authorization: Bearer ...`가 필요하다.
+
+기본 포트는 Unity MCP HTTP Local이 자주 쓰는 `127.0.0.1:8080`과 겹치지 않도록 `8090`을 사용한다. 이미 다른 포트를 쓰고 있다면 `UNITY_RESOURCE_RAG_GATEWAY_PORT`로 override하면 된다.
 
 간단한 시작 예시는 아래와 같다.
 
@@ -94,13 +96,13 @@ export GEMINI_PROJECT_ID=<your-google-cloud-project-id>
 python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --provider gateway \
-  --gateway-url http://127.0.0.1:8080
+  --gateway-url http://127.0.0.1:8090
 ```
 
 또는:
 
 ```bash
-export UNITY_RESOURCE_RAG_GATEWAY_URL=http://127.0.0.1:8080
+export UNITY_RESOURCE_RAG_GATEWAY_URL=http://127.0.0.1:8090
 python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --provider auto

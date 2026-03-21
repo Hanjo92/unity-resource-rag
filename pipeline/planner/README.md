@@ -22,7 +22,7 @@ MCP handoff와 repair bundle이 Unity MCP와 어떻게 연결되는지는 [mcp-s
 python3 pipeline/planner/extract_reference_layout.py \
   /absolute/path/to/reference.png \
   --provider auto \
-  --gateway-url http://127.0.0.1:8080 \
+  --gateway-url http://127.0.0.1:8090 \
   --hint "mobile reward popup" \
   --safe-area-component-type "MyGame.UI.SafeAreaFitter" \
   --safe-area-properties '{"applyOnAwake": true}'

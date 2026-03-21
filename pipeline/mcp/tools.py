@@ -12,6 +12,7 @@ if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    from pipeline.mcp.doctor import build_doctor_payload
     from pipeline.planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -20,6 +21,7 @@ if __package__ in (None, ""):
         inspect_provider_setup as inspect_provider_setup_config,
     )
 else:
+    from .doctor import build_doctor_payload
     from ..planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -305,6 +307,33 @@ def _build_inspect_provider_setup_schema() -> dict[str, Any]:
     }
 
 
+def _build_doctor_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "unity_project_path": {"type": "string", "description": "Unity 프로젝트 루트 경로. 주면 기본 catalog 경로를 함께 진단한다."},
+            "catalog": {"type": "string", "description": "resource_catalog.jsonl 경로. unity_project_path가 있으면 상대 경로도 허용한다."},
+            "reference_image": {"type": "string", "description": "선택적 reference image 경로."},
+            "resolved_blueprint": {"type": "string", "description": "선택적 resolved blueprint JSON 경로."},
+            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. 생략 시 unity_project_path가 있으면 기본값 `http://127.0.0.1:8080/mcp`를 가정한다."},
+            "unity_mcp_timeout_ms": {"type": "integer", "minimum": 1, "description": "Unity MCP HTTP Local probe timeout in milliseconds."},
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
+        },
+        "additionalProperties": False,
+    }
+
+
 def _format_tool_result(title: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = {
         "title": title,
@@ -348,6 +377,17 @@ def _format_inspection_summary(payload: dict[str, Any]) -> str:
         "다음 액션:",
         *[f"- {item}" for item in next_actions],
     ])
+
+
+def _format_doctor_summary(payload: dict[str, Any]) -> str:
+    lines = [f"overall: {payload['overallStatus']}"]
+    for check in payload.get("checks") or []:
+        lines.append(f"- [{check['status']}] {check['key']}: {check['summary']}")
+    next_actions = payload.get("nextActions") or []
+    if next_actions:
+        lines.append("next actions:")
+        lines.extend(f"- {item}" for item in next_actions)
+    return "\n".join(lines)
 
 
 def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
@@ -461,6 +501,24 @@ def inspect_provider_setup(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def doctor(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
+    payload = build_doctor_payload(args)
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": _format_doctor_summary(payload),
+            },
+            {
+                "type": "text",
+                "text": json.dumps(payload, ensure_ascii=False, indent=2),
+            },
+        ],
+        "isError": payload.get("overallStatus") == "error",
+    }
+
+
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
     args = _apply_connection_preset(args)
     script_path = _script_path("workflows", "run_reference_to_resolved_blueprint.py")
@@ -541,6 +599,12 @@ def build_mcp_handoff_bundle(args: dict[str, Any]) -> dict[str, Any]:
 
 
 TOOLS: list[ToolSpec] = [
+    ToolSpec(
+        name="unity_rag.doctor",
+        description="현재 설정과 로컬 실행 환경을 한 번에 진단한다. provider/auth, Unity 프로젝트 경로, catalog 존재 여부, gateway health, Unity MCP HTTP Local custom tool/resource 노출 상태를 함께 점검한다.",
+        input_schema=_build_doctor_schema(),
+        handler=doctor,
+    ),
     ToolSpec(
         name="unity_rag.inspect_provider_setup",
         description="실제 workflow 실행 전 provider/auth 설정만 진단한다. 처음 연결할 때는 이 tool로 권장 preset, 해석된 provider, 토큰 소스, 누락된 설정, 다음 액션을 먼저 확인하는 것이 좋다.",

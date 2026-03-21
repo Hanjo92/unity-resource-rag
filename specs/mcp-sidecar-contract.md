@@ -26,7 +26,7 @@ Input:
 {
   "image": "/absolute/path/to/reference.png",
   "provider": "auto",
-  "gatewayUrl": "http://127.0.0.1:8080",
+  "gatewayUrl": "http://127.0.0.1:8090",
   "screenName": "RewardPopup",
   "hint": [
     "mobile reward popup",

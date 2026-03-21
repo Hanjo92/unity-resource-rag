@@ -5,7 +5,7 @@
 포함 기능:
 
 - `index_project_resources`
-- `ui_asset_catalog`
+- `ui_asset_catalog` resource
 - `apply_ui_blueprint`
 
 패키지 구조:
@@ -20,11 +20,12 @@
 빠른 시작:
 
 1. 이 패키지를 Unity 프로젝트의 `Packages/` 아래에 두거나 git path로 설치한다.
-2. `unity-mcp`가 설치된 프로젝트에서 custom tool discovery가 되도록 `Editor/` 코드를 로드한다.
-3. `index_project_resources`로 카탈로그를 만든다.
-4. 루트 `pipeline/retrieval/search_catalog.py`로 후보를 고른다.
-5. `apply_ui_blueprint`로 실제 UI를 조립한다.
-6. 필요하면 루트 `pipeline/workflows/run_reference_to_resolved_blueprint.py`로 reference-to-resolved-blueprint부터 MCP handoff bundle까지 한 번에 만든다.
+2. `unity-mcp`가 설치된 프로젝트에서 `Editor/` 코드를 로드하고, HTTP Local transport를 쓴다면 `Project Scoped Tools`를 끈 뒤 Local HTTP Server를 다시 시작한다.
+3. `index_project_resources`와 `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 노출되는지 확인한다.
+4. `index_project_resources`로 카탈로그를 만든다.
+5. 루트 `pipeline/retrieval/search_catalog.py`로 후보를 고른다.
+6. `apply_ui_blueprint`로 실제 UI를 조립한다.
+7. 필요하면 루트 `pipeline/workflows/run_reference_to_resolved_blueprint.py`로 reference-to-resolved-blueprint부터 MCP handoff bundle까지 한 번에 만든다.
 
 샘플:
 

@@ -17,7 +17,7 @@ python3 pipeline/workflows/run_reference_to_resolved_blueprint.py \
   --image /absolute/path/to/reference.png \
   --catalog /absolute/path/to/resource_catalog.jsonl \
   --provider auto \
-  --gateway-url http://127.0.0.1:8080 \
+  --gateway-url http://127.0.0.1:8090 \
   --hint "mobile reward popup" \
   --safe-area-component-type "MyGame.UI.SafeAreaFitter" \
   --safe-area-properties '{"applyOnAwake": true}'

@@ -1,6 +1,22 @@
 # MCP Sidecar Usage
 
-## 1. Inspect Provider Setup
+## 1. Run Doctor First
+
+실제 워크플로우 전에 전체 연결 상태를 한 번에 점검한다.
+
+```json
+{
+  "tool": "unity_rag.doctor",
+  "arguments": {
+    "unity_project_path": "/absolute/path/to/unity-project",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+응답에서 `overallStatus`가 `ok` 또는 작업 가능한 `warn`이고 `nextActions`가 정리되면 다음 단계로 넘어간다.
+
+## 2. Inspect Provider Setup
 
 실제 워크플로우를 실행하기 전에 연결 설정이 어떻게 해석되는지 먼저 확인한다.
 
@@ -15,7 +31,7 @@
 
 응답에서 `missingSettings`가 비어 있고 `nextActions`가 실행 가능 상태를 안내하면 다음 단계로 넘어간다.
 
-## 2. Build The Catalog
+## 3. Build The Catalog
 
 Run the Unity-side export tool first so the sidecar has real project assets to bind against.
 
@@ -24,7 +40,7 @@ python3 pipeline/indexer/inspect_catalog.py \
   Library/ResourceRag/resource_catalog.jsonl
 ```
 
-## 3. Extract And Bind
+## 4. Extract And Bind
 
 From a reference image:
 
@@ -46,7 +62,7 @@ Outputs:
 - `03-binding-report.json`
 - `04-mcp-handoff.json`
 
-## 4. Execute In Unity MCP
+## 5. Execute In Unity MCP
 
 Use the resolved blueprint with `apply_ui_blueprint`.
 
@@ -90,7 +106,7 @@ Then capture a screenshot:
 }
 ```
 
-## 5. Repair If Needed
+## 6. Repair If Needed
 
 Compare the screenshot against the reference image:
 

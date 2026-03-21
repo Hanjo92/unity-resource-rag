@@ -18,7 +18,7 @@
 ### Unity 쪽
 
 - Custom tool: `index_project_resources`
-- Resource catalog: `ui_asset_catalog`
+- Resource: `ui_asset_catalog`
 - Custom tool: `apply_ui_blueprint`
 
 ### Sidecar 쪽
@@ -60,7 +60,9 @@ pip install -r requirements.txt
 
 1. Unity 프로젝트에 `unity-mcp`를 설치한다.
 2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag)를 `Packages/` 아래에 두거나 Git URL로 설치한다.
-3. Unity에서 custom tool discovery가 완료되면 `index_project_resources`, `ui_asset_catalog`, `apply_ui_blueprint`를 사용할 수 있다.
+3. Unity MCP를 HTTP Local로 쓸 때는 `Project Scoped Tools`를 끄고 Local HTTP Server를 다시 시작한다. 이 설정이 켜져 있으면 일부 클라이언트에서는 custom tool이 `execute_custom_tool` 뒤에만 보일 수 있다.
+4. Unity에서 discovery와 resource registration이 완료되면 `index_project_resources`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 사용할 수 있다.
+5. sidecar와 gateway를 같이 띄울 때는 `unity-mcp`의 기본 `127.0.0.1:8080/mcp`와 겹치지 않도록 gateway 기본 URL `http://127.0.0.1:8090`을 사용한다.
 
 패키지 상세 문서는 [Packages/com.hanjo92.unity-resource-rag/README.md](./Packages/com.hanjo92.unity-resource-rag/README.md)에서 확인할 수 있다.
 
@@ -70,6 +72,8 @@ pip install -r requirements.txt
 
 - `unity-mcp`: Unity Editor를 실제로 조작
 - 이 저장소의 MCP server: planning / retrieval / repair sidecar를 담당
+
+`ui_asset_catalog`는 callable custom tool이 아니라 MCP resource다. tool 목록이 아니라 resource 목록에서 읽는 경로라는 점을 기준으로 연결하면 덜 헷갈린다.
 
 실사용용 전체 예시는 [examples/mcp/mcp-client-config.with-unity-mcp.example.json](./examples/mcp/mcp-client-config.with-unity-mcp.example.json)에 있고, key 설명은 [examples/mcp/mcp-client-config.with-unity-mcp.example.md](./examples/mcp/mcp-client-config.with-unity-mcp.example.md)에서 볼 수 있다.
 
@@ -102,11 +106,12 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 
 ### 기본 흐름
 
-1. Unity에서 `index_project_resources`를 실행해 `resource_catalog.jsonl`을 생성한다.
-2. MCP client에 `unity-mcp`와 `unity-resource-rag` 두 서버를 함께 등록한다.
-3. 먼저 `unity-resource-rag`에서 `unity_rag.run_reference_to_resolved_blueprint`를 호출해 handoff bundle을 만든다.
-4. 이어서 `unity-mcp`에서 handoff bundle을 받아 `apply_ui_blueprint`와 `manage_camera`를 실행한다.
-5. 결과가 기대와 다르면 다시 `unity-resource-rag`의 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
+1. MCP client에 `unity-mcp`와 `unity-resource-rag` 두 서버를 함께 등록한다.
+2. 먼저 `unity-resource-rag`에서 `unity_rag.doctor`를 실행해 provider/auth, Unity 프로젝트 경로, catalog, gateway, Unity MCP custom tool/resource 노출 상태를 점검한다.
+3. Unity에서 `index_project_resources`를 실행해 `resource_catalog.jsonl`을 생성한다.
+4. `unity-resource-rag`에서 `unity_rag.run_reference_to_resolved_blueprint`를 호출해 handoff bundle을 만든다.
+5. 이어서 `unity-mcp`에서 handoff bundle을 받아 `apply_ui_blueprint`와 `manage_camera`를 실행한다.
+6. 결과가 기대와 다르면 다시 `unity-resource-rag`의 `unity_rag.run_verification_repair_loop`를 호출해 repair bundle을 만든다.
 
 ### CLI 예시
 

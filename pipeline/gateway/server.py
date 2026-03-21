@@ -13,7 +13,7 @@ from .router import GatewayCapabilityRouter, GatewayRouteError, create_default_g
 
 
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8080
+DEFAULT_PORT = 8090
 DEFAULT_TOKEN_ENV = "UNITY_RESOURCE_RAG_GATEWAY_TOKEN"
 DEFAULT_ROUTER = create_default_gateway_router()
 

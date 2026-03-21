@@ -4,7 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Changed
+
+- moved the gateway default port to `8090` so it does not collide with Unity MCP HTTP Local's common `8080` default
+- clarified the Unity MCP HTTP Local setup path, including `Project Scoped Tools` behavior and the fact that `ui_asset_catalog` is an MCP resource rather than a callable tool
 
 ## [0.4.0-beta] - 2026-03-21
 

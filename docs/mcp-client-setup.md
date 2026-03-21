@@ -179,6 +179,33 @@ JSON에는 주석을 넣을 수 없으므로, key별 설명은 [examples/mcp/mcp
 
 권장 흐름은 `unity-resource-rag`로 blueprint / repair handoff를 만든 뒤, 생성된 handoff bundle을 `unity-mcp` 쪽 `apply_ui_blueprint`와 `manage_camera`로 넘기는 방식이다.
 
+처음 연결할 때는 실제 workflow보다 먼저 `unity_rag.doctor`를 한 번 돌리는 것을 권장한다. provider/auth만이 아니라 Unity 프로젝트 경로, catalog, gateway, Unity MCP HTTP Local custom tool/resource 노출 상태까지 함께 점검해준다.
+
+```json
+{
+  "tool": "unity_rag.doctor",
+  "arguments": {
+    "unity_project_path": "/absolute/path/to/unity-project",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+## Unity HTTP Local Checklist
+
+Codex나 다른 HTTP MCP client로 `unity-mcp`를 직접 붙일 때는 아래 순서로 맞추는 편이 안전하다.
+
+1. Unity에서 `Window > MCP for Unity`를 연다.
+2. HTTP Local transport를 쓴다면 `Project Scoped Tools`를 끈다.
+3. `Stop Local HTTP Server` 후 `Start Local HTTP Server`로 다시 올린다.
+4. custom tool은 `index_project_resources`, `apply_ui_blueprint`처럼 tool 목록에서 확인하고, `ui_asset_catalog`는 tool이 아니라 resource 목록에서 확인한다.
+
+`Project Scoped Tools`가 켜져 있으면 일부 client에서는 개별 custom tool 대신 `execute_custom_tool`만 보일 수 있다.
+
+## Gateway Port Note
+
+`unity-mcp`의 HTTP Local은 흔히 `127.0.0.1:8080/mcp`를 사용한다. `pipeline.gateway`는 기본값으로 `http://127.0.0.1:8090`을 쓰도록 잡혀 있으니, 두 서버를 같이 띄울 때는 이 기본값을 그대로 두는 편이 충돌이 적다.
+
 ## Environment Variables
 
 - `OPENAI_API_KEY`: OpenAI provider
