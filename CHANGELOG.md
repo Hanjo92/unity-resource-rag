@@ -4,10 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-22
+
+Stable Unity-first usability release for `unity-resource-rag`.
+
+### Added
+
+- Unity editor readiness dashboard with `Ready / Attention / Blocked` setup summaries
+- repo-local Python runtime bootstrap assistant from inside `Window > Unity Resource RAG`
+- non-blocking multi-phase build flow that checks readiness before starting `unity_rag.start_ui_build`
+- in-window `Capture Result` and `Run Repair Handoff` follow-up actions
+- case export writer that saves markdown and JSON quality reports under `Library/ResourceRag/Cases/`
+- local runner bridge commands for `doctor`, `capture_result`, and verification repair handoff execution
+
 ### Changed
 
 - moved the gateway default port to `8090` so it does not collide with Unity MCP HTTP Local's common `8080` default
 - clarified the Unity MCP HTTP Local setup path, including `Project Scoped Tools` behavior and the fact that `ui_asset_catalog` is an MCP resource rather than a callable tool
+- promoted the Unity window from beta setup helper to the main stable path for `Quick Setup -> Readiness -> Start UI Build -> Capture & Repair -> Case Export`
+- package metadata, MCP server metadata, and gateway metadata now report version `0.5.0`
+
+### Notes
+
+- the stable path assumes a full local checkout so the Unity package can reach the root `pipeline/` sidecar
+- `Run Repair Handoff` still requires a reference image; catalog-first draft flows without a reference stop at capture and manual review
+- the long-lived untracked example draft blueprint was intentionally left outside the release payload
 
 ## [0.4.0-beta] - 2026-03-21
 
@@ -100,7 +121,8 @@ Initial public scaffold for `unity-resource-rag`.
 - Example JSON files were validated locally.
 - Final Unity compile/runtime verification still needs a real Unity project with `unity-mcp`.
 
-[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.4.0-beta...main
+[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.5.0...main
+[0.5.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.5.0
 [0.4.0-beta]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.4.0-beta
 [0.3.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.3.0
 [0.2.1]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.2.1

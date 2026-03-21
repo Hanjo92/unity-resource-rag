@@ -13,6 +13,7 @@ if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    from pipeline.mcp.unity_http import UnityMcpHttpError, get_unity_http_client
     from pipeline.planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -21,6 +22,7 @@ if __package__ in (None, ""):
         inspect_provider_setup as inspect_provider_setup_config,
     )
 else:
+    from .unity_http import UnityMcpHttpError, get_unity_http_client
     from ..planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -383,20 +385,10 @@ def _check_gateway(args: dict[str, Any]) -> DoctorCheck:
 
 
 def _post_json_rpc(url: str, method: str, params: dict[str, Any] | None, timeout_ms: int, request_id: int) -> dict[str, Any]:
-    payload = {
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "method": method,
-        "params": params or {},
-    }
-    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib_request.Request(
-        url,
-        data=encoded,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    response_payload = _load_json_response(request, timeout_ms)
+    try:
+        response_payload = get_unity_http_client(url, timeout_ms).request(method, params, request_id)
+    except UnityMcpHttpError as exc:
+        raise RuntimeError(str(exc)) from exc
     error_payload = response_payload.get("error")
     if error_payload:
         raise RuntimeError(str(error_payload))

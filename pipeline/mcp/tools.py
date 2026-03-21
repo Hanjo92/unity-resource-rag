@@ -16,6 +16,7 @@ if __package__ in (None, ""):
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
     from pipeline.mcp.doctor import DEFAULT_UNITY_MCP_TIMEOUT_MS, DEFAULT_UNITY_MCP_URL, build_doctor_payload
+    from pipeline.mcp.unity_http import UnityMcpHttpError, get_unity_http_client
     from pipeline.planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -25,6 +26,7 @@ if __package__ in (None, ""):
     )
 else:
     from .doctor import DEFAULT_UNITY_MCP_TIMEOUT_MS, DEFAULT_UNITY_MCP_URL, build_doctor_payload
+    from .unity_http import UnityMcpHttpError, get_unity_http_client
     from ..planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -38,6 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_ROOT = REPO_ROOT / "pipeline"
 DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
 DEFAULT_DRAFT_OUTPUT_RELATIVE_PATH = Path("Library/ResourceRag/Drafts")
+DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS = 30000
 
 PROVIDER_DESCRIPTION = (
     "추출 provider 선택. "
@@ -1031,32 +1034,11 @@ def _build_catalog_draft_blueprint(
 
 
 def _http_json_request(url: str, method: str, params: dict[str, Any] | None, timeout_ms: int, request_id: int) -> dict[str, Any]:
-    payload = {
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "method": method,
-        "params": params or {},
-    }
-    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib_request.Request(
-        url,
-        data=encoded,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
-        with urllib_request.urlopen(request, timeout=max(timeout_ms / 1000.0, 1.0)) as response:
-            raw = response.read().decode("utf-8")
-    except (urllib_error.URLError, urllib_error.HTTPError) as exc:
-        raise ToolExecutionError(f"Unity MCP request failed: {exc}") from exc
-
-    try:
-        data = json.loads(raw or "{}")
-    except json.JSONDecodeError as exc:
-        raise ToolExecutionError(
-            "Unity MCP returned invalid JSON.",
-            details={"rawResponse": raw},
-        ) from exc
+        data = get_unity_http_client(url, timeout_ms).request(method, params, request_id)
+    except UnityMcpHttpError as exc:
+        details = {"responseText": exc.response_text} if exc.response_text else {}
+        raise ToolExecutionError(str(exc), details=details) from exc
 
     if data.get("error"):
         raise ToolExecutionError(
@@ -1302,7 +1284,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     force_reindex = bool(args.get("force_reindex", False))
 
     unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
-    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_TIMEOUT_MS)
+    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS)
     available_tools: list[str] | None = None
 
     if force_reindex or not catalog_path.exists() or apply_in_unity:
@@ -1416,7 +1398,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     force_reindex = bool(args.get("force_reindex", False))
 
     unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
-    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_TIMEOUT_MS)
+    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS)
     available_tools: list[str] | None = None
 
     if force_reindex or not catalog_path.exists() or apply_in_unity:

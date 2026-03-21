@@ -8,6 +8,7 @@
 - `query_ui_asset_catalog`
 - `ui_asset_catalog` resource
 - `apply_ui_blueprint`
+- `Window > Unity Resource RAG` editor window
 
 패키지 구조:
 
@@ -21,12 +22,36 @@
 빠른 시작:
 
 1. 이 패키지를 Unity 프로젝트의 `Packages/` 아래에 두거나 git path로 설치한다.
-2. `unity-mcp`가 설치된 프로젝트에서 `Editor/` 코드를 로드하고, HTTP Local transport를 쓴다면 `Project Scoped Tools`를 끈 뒤 Local HTTP Server를 다시 시작한다.
-3. `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 노출되는지 확인한다.
-4. `index_project_resources`로 카탈로그를 만든다.
-5. 루트 `pipeline/retrieval/search_catalog.py`로 후보를 고른다.
-6. `apply_ui_blueprint`로 실제 UI를 조립한다.
-7. 필요하면 루트 `pipeline/workflows/run_reference_to_resolved_blueprint.py`로 reference-to-resolved-blueprint부터 MCP handoff bundle까지 한 번에 만든다.
+2. 가능하면 local checkout의 `file:` 경로로 연결한다. `Window > Unity Resource RAG`의 one-click build는 루트 `pipeline/` sidecar에 접근해야 한다.
+3. `unity-mcp`가 설치된 프로젝트에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 누른다.
+4. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 repo-local `.venv`를 준비한다.
+5. 같은 창에서 reference 이미지를 넣거나, goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
+6. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`까지 이어서 진행할 수 있다.
+7. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
+8. `ui_asset_catalog`는 callable tool이 아니라 MCP resource라는 점을 기억한다.
+
+`Quick Setup`이 하는 일:
+
+- Unity MCP를 HTTP Local transport로 맞춤
+- `Project Scoped Tools`를 꺼서 custom tool이 직접 노출되게 함
+- `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`, `ui_asset_catalog`를 활성화 시도
+- Local HTTP Server / bridge 재시작 시도
+- `~/.codex/config.toml`에 `unityResourceRag` sidecar entry 동기화
+
+`Readiness Dashboard`가 하는 일:
+
+- `repo / python / provider login / Unity Editor connection / build input` 상태를 `Ready / Attention / Blocked`로 요약
+- raw MCP jargon 대신 다음 액션 중심 문장으로 현재 막힌 지점을 설명
+- `Refresh Readiness`로 현재 상태를 다시 확인
+- `Bootstrap Python Runtime`으로 repo-local `.venv` 생성과 requirements 설치 시도
+
+`Start UI Build`가 하는 일:
+
+- reference image가 있으면 `reference-first` path
+- 없으면 `catalog-first draft` path
+- 내부적으로 루트 `pipeline/mcp/local_runner.py`를 호출해서 readiness 확인과 `unity_rag.start_ui_build`를 순차 실행
+- doctor diagnostics와 Unity apply까지 한 번에 시도
+- 성공 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`로 이어질 수 있게 결과를 유지
 
 샘플:
 
