@@ -175,7 +175,7 @@ JSON에는 주석을 넣을 수 없으므로, key별 설명은 [examples/mcp/mcp
 서버별 역할은 다음처럼 나뉜다.
 
 - `unity-mcp` entry: Unity Editor 연결, scene 조작, `execute_custom_tool`, `manage_camera` 같은 Unity 쪽 실행을 담당한다.
-- `unity-resource-rag` entry: `unity_rag.doctor`, `unity_rag.run_first_pass_ui_build`, `unity_rag.run_catalog_draft_ui_build`, `unity_rag.inspect_provider_setup`, `unity_rag.extract_reference_layout`, `unity_rag.run_reference_to_resolved_blueprint`, `unity_rag.run_verification_repair_loop`, `unity_rag.build_mcp_handoff_bundle` 같은 sidecar workflow를 담당한다.
+- `unity-resource-rag` entry: `unity_rag.start_ui_build`, `unity_rag.doctor`, `unity_rag.run_first_pass_ui_build`, `unity_rag.run_catalog_draft_ui_build`, `unity_rag.inspect_provider_setup`, `unity_rag.extract_reference_layout`, `unity_rag.run_reference_to_resolved_blueprint`, `unity_rag.run_verification_repair_loop`, `unity_rag.build_mcp_handoff_bundle` 같은 sidecar workflow를 담당한다.
 
 권장 흐름은 `unity-resource-rag`로 blueprint / repair handoff를 만든 뒤, 생성된 handoff bundle을 `unity-mcp` 쪽 `apply_ui_blueprint`와 `manage_camera`로 넘기는 방식이다.
 
@@ -191,7 +191,35 @@ JSON에는 주석을 넣을 수 없으므로, key별 설명은 [examples/mcp/mcp
 }
 ```
 
-첫 성공 경로를 가장 짧게 밟고 싶다면 다음 tool을 권장한다. catalog가 없으면 Unity에서 `index_project_resources`를 먼저 호출하고, resolved blueprint 생성과 Unity apply까지 한 번에 이어서 처리한다.
+첫 성공 경로를 가장 짧게 밟고 싶다면 이제는 아래 단일 entrypoint를 권장한다. 내부에서 `doctor`를 먼저 실행하고, reference 유무에 따라 `run_first_pass_ui_build`와 `run_catalog_draft_ui_build`를 자동 선택한다.
+
+```json
+{
+  "tool": "unity_rag.start_ui_build",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "unity_project_path": "/absolute/path/to/unity-project",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+reference 이미지가 없을 때도 같은 entrypoint를 유지할 수 있다.
+
+```json
+{
+  "tool": "unity_rag.start_ui_build",
+  "arguments": {
+    "goal": "reward popup",
+    "screen_name": "RewardPopupDraft",
+    "title": "Reward Unlocked",
+    "body": "Catalog-first popup draft",
+    "unity_project_path": "/absolute/path/to/unity-project"
+  }
+}
+```
+
+세부 단계를 직접 고르고 싶다면 다음 tool을 쓴다. catalog가 없으면 Unity에서 `index_project_resources`를 먼저 호출하고, resolved blueprint 생성과 Unity apply까지 한 번에 이어서 처리한다.
 
 ```json
 {

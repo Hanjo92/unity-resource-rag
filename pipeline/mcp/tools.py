@@ -415,6 +415,60 @@ def _build_run_catalog_draft_ui_build_schema() -> dict[str, Any]:
     }
 
 
+def _build_start_ui_build_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "image": {"type": "string", "description": "Path to the reference image. 있으면 reference-first path를 우선 선택한다."},
+            "reference_layout": {"type": "string", "description": "Existing reference layout JSON. image 없이도 reference-first path를 강제할 수 있다."},
+            "goal": {"type": "string", "description": "reference가 없을 때 catalog-first draft에 쓸 UI goal 설명."},
+            "screen_name": {"type": "string"},
+            "title": {"type": "string"},
+            "subtitle": {"type": "string"},
+            "body": {"type": "string"},
+            "price_text": {"type": "string"},
+            "primary_action_label": {"type": "string"},
+            "secondary_action_label": {"type": "string"},
+            "shell_query": {"type": "string"},
+            "panel_query": {"type": "string"},
+            "featured_asset_query": {"type": "string"},
+            "title_font_query": {"type": "string"},
+            "body_font_query": {"type": "string"},
+            "unity_project_path": {"type": "string", "description": "Unity project root. Used to infer the default catalog path and local setup checks."},
+            "catalog": {"type": "string", "description": "Path to resource_catalog.jsonl. If omitted and unity_project_path is set, defaults to Library/ResourceRag/resource_catalog.jsonl."},
+            "vector_index": {"type": "string"},
+            "output_dir": {"type": "string"},
+            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. Defaults to http://127.0.0.1:8080/mcp when Unity apply/index is enabled."},
+            "unity_mcp_timeout_ms": {"type": "integer", "minimum": 1, "description": "Unity MCP HTTP Local timeout in milliseconds."},
+            "force_reindex": {"type": "boolean"},
+            "apply_in_unity": {"type": "boolean", "default": True},
+            "validate_before_apply": {"type": "boolean", "default": True},
+            "run_doctor": {"type": "boolean", "description": "Start 전에 doctor diagnostics를 함께 실행할지 여부.", "default": True},
+            "require_doctor_ok": {"type": "boolean", "description": "doctor가 error면 실제 build 실행을 중단할지 여부.", "default": True},
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
+            "model": {"type": "string"},
+            "detail": {"type": "string", "enum": ["low", "high", "auto"]},
+            "max_image_dim": {"type": "integer", "minimum": 1},
+            "hint": {"type": "array", "items": {"type": "string"}},
+            "safe_area_component_type": {"type": "string"},
+            "safe_area_properties": {"type": "string"},
+            "allow_partial": {"type": "boolean"},
+        },
+        "additionalProperties": False,
+    }
+
+
 def _format_tool_result(title: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = {
         "title": title,
@@ -711,6 +765,10 @@ def _asset_reference_from_candidate(
         if value not in (None, "", 0)
     }
     return filtered or None
+
+
+def _dedupe_strings(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in items if item))
 
 
 def _full_stretch_rect() -> dict[str, Any]:
@@ -1594,6 +1652,55 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     return _format_tool_result("run_catalog_draft_ui_build", payload)
 
 
+def start_ui_build(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
+
+    run_doctor = bool(args.get("run_doctor", True))
+    require_doctor_ok = bool(args.get("require_doctor_ok", True))
+    doctor_payload = build_doctor_payload(args) if run_doctor else None
+    if doctor_payload is not None and require_doctor_ok and doctor_payload.get("overallStatus") == "error":
+        raise ToolExecutionError(
+            "Doctor detected blocking setup issues before starting the UI build.",
+            details={"doctor": doctor_payload},
+        )
+
+    has_reference_input = bool(args.get("image") or args.get("reference_layout"))
+    route = "reference_first_pass" if has_reference_input else "catalog_draft"
+    route_reason = (
+        "reference input (`image` or `reference_layout`) was provided."
+        if has_reference_input
+        else "no reference input was provided, so the catalog-first draft path was selected."
+    )
+
+    route_args = dict(args)
+    if route == "catalog_draft":
+        inferred_goal = (
+            str(route_args.get("goal") or "").strip()
+            or str(route_args.get("title") or "").strip()
+            or str(route_args.get("body") or "").strip()
+            or str(route_args.get("screen_name") or "").strip()
+            or "catalog draft ui"
+        )
+        route_args["goal"] = inferred_goal
+        execution_result = run_catalog_draft_ui_build(route_args)
+    else:
+        execution_result = run_first_pass_ui_build(route_args)
+
+    execution_payload = _extract_wrapped_payload(execution_result)
+    doctor_next_actions = doctor_payload.get("nextActions") or [] if isinstance(doctor_payload, dict) else []
+    execution_next_actions = execution_payload.get("nextActions") or [] if isinstance(execution_payload, dict) else []
+    next_actions = _dedupe_strings([*doctor_next_actions, *execution_next_actions])
+
+    payload = {
+        "selectedPath": route,
+        "routeReason": route_reason,
+        "doctor": doctor_payload,
+        "execution": execution_payload,
+        "nextActions": next_actions,
+    }
+    return _format_tool_result("start_ui_build", payload)
+
+
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
     args = _apply_connection_preset(args)
     script_path = _script_path("workflows", "run_reference_to_resolved_blueprint.py")
@@ -1674,6 +1781,12 @@ def build_mcp_handoff_bundle(args: dict[str, Any]) -> dict[str, Any]:
 
 
 TOOLS: list[ToolSpec] = [
+    ToolSpec(
+        name="unity_rag.start_ui_build",
+        description="가장 짧은 단일 진입점이다. 먼저 doctor diagnostics를 함께 실행하고, `image`/`reference_layout`가 있으면 reference-first path를, 없으면 catalog-first draft path를 자동 선택해 Unity apply까지 이어준다.",
+        input_schema=_build_start_ui_build_schema(),
+        handler=start_ui_build,
+    ),
     ToolSpec(
         name="unity_rag.doctor",
         description="현재 설정과 로컬 실행 환경을 한 번에 진단한다. provider/auth, Unity 프로젝트 경로, catalog 존재 여부, gateway health, Unity MCP HTTP Local custom tool/resource 노출 상태를 함께 점검한다.",
