@@ -27,7 +27,7 @@ namespace UnityResourceRag.Editor
                 return new UnityResourceRagCodexConfigResult
                 {
                     Skipped = true,
-                    Summary = "sidecar repo root를 찾지 못해 Codex config 동기화를 건너뛰었습니다.",
+                    Summary = "Skipped Codex config sync because the sidecar repo root could not be found.",
                     ConfigPath = configPath,
                 };
             }
@@ -43,7 +43,7 @@ namespace UnityResourceRag.Editor
                 {
                     return new UnityResourceRagCodexConfigResult
                     {
-                        Summary = $"Codex config를 읽지 못했습니다: {ex.Message}",
+                        Summary = $"Failed to read the Codex config: {ex.Message}",
                         ConfigPath = configPath,
                     };
                 }
@@ -64,7 +64,7 @@ namespace UnityResourceRag.Editor
             {
                 return new UnityResourceRagCodexConfigResult
                 {
-                    Summary = $"Codex config를 쓰지 못했습니다: {ex.Message}",
+                    Summary = $"Failed to write the Codex config: {ex.Message}",
                     ConfigPath = configPath,
                 };
             }
@@ -72,7 +72,7 @@ namespace UnityResourceRag.Editor
             return new UnityResourceRagCodexConfigResult
             {
                 Success = true,
-                Summary = $"Codex config에 `{ServerKey}` MCP server를 동기화했습니다.",
+                Summary = $"Synced the `{ServerKey}` MCP server entry into the Codex config.",
                 ConfigPath = configPath,
             };
         }

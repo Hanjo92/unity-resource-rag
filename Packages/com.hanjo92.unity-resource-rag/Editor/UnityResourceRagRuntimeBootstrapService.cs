@@ -28,13 +28,13 @@ namespace UnityResourceRag.Editor
             settings.EnsureDefaults();
             if (!UnityResourceRagEditorSettings.IsSidecarRepoRoot(settings.SidecarRepoRoot))
             {
-                error = "full unity-resource-rag checkout 경로가 필요합니다. Sidecar Repo Root를 먼저 맞춰 주세요.";
+                error = "A full unity-resource-rag checkout path is required. Set Sidecar Repo Root first.";
                 return false;
             }
 
             if (!UnityResourceRagEditorSettings.TryDetectBootstrapPythonExecutable(settings.SidecarRepoRoot, out string bootstrapPython))
             {
-                error = "기본 Python interpreter를 찾지 못했습니다. Python 3가 설치되어 있는지 확인한 뒤 다시 시도해 주세요.";
+                error = "No base Python interpreter was found. Make sure Python 3 is installed, then try again.";
                 return false;
             }
 
@@ -60,7 +60,7 @@ namespace UnityResourceRag.Editor
 
             if (string.IsNullOrWhiteSpace(venvPython))
             {
-                result.Errors.Add("repo-local `.venv` 경로를 계산하지 못했습니다.");
+                result.Errors.Add("Could not resolve the repo-local `.venv` path.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -69,7 +69,7 @@ namespace UnityResourceRag.Editor
             {
                 settings.PythonExecutable = venvPython;
                 settings.SaveSettings();
-                result.Steps.Add("이미 준비된 repo-local Python runtime을 찾았습니다.");
+                result.Steps.Add("Found an existing ready-to-use repo-local Python runtime.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -82,7 +82,7 @@ namespace UnityResourceRag.Editor
                     $"-m venv {Quote(Path.Combine(repoRoot, ".venv"))}",
                     repoRoot,
                     BootstrapTimeoutMs);
-                AppendCommandResult(result, createVenv, "repo-local `.venv`를 생성했습니다.");
+                AppendCommandResult(result, createVenv, "Created the repo-local `.venv`.");
                 if (!createVenv.Success)
                 {
                     result.Summary = BuildSummary(result);
@@ -91,19 +91,19 @@ namespace UnityResourceRag.Editor
             }
             else
             {
-                result.Warnings.Add("기존 `.venv`를 재사용해 dependency를 다시 맞춥니다.");
+                result.Warnings.Add("Reusing the existing `.venv` and refreshing its dependencies.");
             }
 
             if (!File.Exists(requirementsPath))
             {
-                result.Errors.Add($"requirements.txt를 찾지 못했습니다: {requirementsPath}");
+                result.Errors.Add($"Could not find requirements.txt: {requirementsPath}");
                 result.Summary = BuildSummary(result);
                 return result;
             }
 
             if (!Directory.Exists(venvDirectory))
             {
-                result.Errors.Add("repo-local Python runtime이 생성되지 않았습니다.");
+                result.Errors.Add("The repo-local Python runtime was not created.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -113,7 +113,7 @@ namespace UnityResourceRag.Editor
                 $"-m pip install -r {Quote(requirementsPath)}",
                 repoRoot,
                 BootstrapTimeoutMs);
-            AppendCommandResult(result, installRequirements, "repo-local Python runtime에 requirements를 설치했습니다.");
+            AppendCommandResult(result, installRequirements, "Installed the requirements into the repo-local Python runtime.");
             if (!installRequirements.Success)
             {
                 result.Summary = BuildSummary(result);
@@ -122,14 +122,14 @@ namespace UnityResourceRag.Editor
 
             if (!UnityResourceRagEditorSettings.IsPythonReadyForSidecar(venvPython, repoRoot))
             {
-                result.Errors.Add("bootstrap 후에도 sidecar imports를 확인하지 못했습니다.");
+                result.Errors.Add("Sidecar imports still could not be verified after bootstrap.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
 
             settings.PythonExecutable = venvPython;
             settings.SaveSettings();
-            result.Steps.Add("Unity Resource RAG가 repo-local Python runtime을 기본 interpreter로 사용하도록 저장했습니다.");
+            result.Steps.Add("Saved the repo-local Python runtime as the default interpreter for Unity Resource RAG.");
             result.Summary = BuildSummary(result);
             return result;
         }
@@ -194,7 +194,7 @@ namespace UnityResourceRag.Editor
                 using var process = Process.Start(startInfo);
                 if (process == null)
                 {
-                    return ProcessCommandResult.Failed("Python bootstrap process를 시작하지 못했습니다.");
+                    return ProcessCommandResult.Failed("Failed to start the Python bootstrap process.");
                 }
 
                 Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();

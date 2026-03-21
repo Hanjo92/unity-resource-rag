@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace UnityResourceRag.Editor
@@ -31,7 +32,7 @@ namespace UnityResourceRag.Editor
 
             if (buildResult == null || !buildResult.Success || buildResult.Payload == null)
             {
-                result.Errors.Add("성공한 UI build 결과가 있어야 case report를 만들 수 있습니다.");
+                result.Errors.Add("A successful UI build result is required before a case report can be created.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -247,10 +248,10 @@ namespace UnityResourceRag.Editor
         {
             if (result.Success)
             {
-                return "Case export를 저장했습니다.";
+                return "Saved the case export.";
             }
 
-            return $"Case export를 저장하지 못했습니다. ({result.Errors.Count} error)";
+            return $"Failed to save the case export. ({result.Errors.Count} error)";
         }
     }
 }

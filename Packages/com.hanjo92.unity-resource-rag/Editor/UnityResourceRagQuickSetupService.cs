@@ -54,8 +54,8 @@ namespace UnityResourceRag.Editor
             EditorPrefs.SetBool(AutoRegisterEnabledKey, true);
             EditorConfigurationCache.Instance.Refresh();
 
-            result.Steps.Add($"Unity MCP를 HTTP Local (`{settings.UnityMcpBaseUrl}`)로 고정했습니다.");
-            result.Steps.Add("Project Scoped Tools를 꺼서 custom tool이 직접 노출되도록 맞췄습니다.");
+            result.Steps.Add($"Configured Unity MCP to use HTTP Local (`{settings.UnityMcpBaseUrl}`).");
+            result.Steps.Add("Disabled Project Scoped Tools so custom tools are exposed directly.");
         }
 
         private static void EnableCustomTools(UnityResourceRagQuickSetupResult result)
@@ -76,13 +76,13 @@ namespace UnityResourceRag.Editor
 
                     found = true;
                     discovery.SetToolEnabled(toolName, true);
-                    result.Steps.Add($"custom tool `{toolName}` 를 활성화했습니다.");
+                    result.Steps.Add($"Enabled custom tool `{toolName}`.");
                     break;
                 }
 
                 if (!found)
                 {
-                    result.Warnings.Add($"custom tool `{toolName}` 를 아직 발견하지 못했습니다. Unity 컴파일이 끝난 뒤 창을 다시 열어주세요.");
+                    result.Warnings.Add($"Custom tool `{toolName}` has not been discovered yet. Reopen the window after Unity compilation finishes.");
                 }
             }
         }
@@ -105,13 +105,13 @@ namespace UnityResourceRag.Editor
 
                     found = true;
                     discovery.SetResourceEnabled(resourceName, true);
-                    result.Steps.Add($"resource `{resourceName}` 를 활성화했습니다.");
+                    result.Steps.Add($"Enabled resource `{resourceName}`.");
                     break;
                 }
 
                 if (!found)
                 {
-                    result.Warnings.Add($"resource `{resourceName}` 를 아직 발견하지 못했습니다. Unity 컴파일이 끝났는지 확인해 주세요.");
+                    result.Warnings.Add($"Resource `{resourceName}` has not been discovered yet. Confirm that Unity compilation has completed.");
                 }
             }
         }
@@ -121,7 +121,7 @@ namespace UnityResourceRag.Editor
             IServerManagementService server = MCPServiceLocator.Server;
             if (!server.CanStartLocalServer())
             {
-                result.Errors.Add("Unity MCP Local HTTP Server를 시작할 수 없습니다. HTTP Local 설정을 다시 확인해 주세요.");
+                result.Errors.Add("Unity MCP Local HTTP Server cannot be started. Check the HTTP Local configuration again.");
                 return;
             }
 
@@ -129,15 +129,15 @@ namespace UnityResourceRag.Editor
             bool started = server.StartLocalHttpServer(true);
             if (!started && !server.IsLocalHttpServerReachable())
             {
-                result.Errors.Add("Unity MCP Local HTTP Server 시작에 실패했습니다.");
+                result.Errors.Add("Failed to start the Unity MCP Local HTTP Server.");
                 return;
             }
 
             WaitFor(server.IsLocalHttpServerReachable, 3000);
-            result.Steps.Add("Unity MCP Local HTTP Server를 재시작했습니다.");
+            result.Steps.Add("Restarted the Unity MCP Local HTTP Server.");
             ScheduleBridgeWarmup();
-            result.Steps.Add("MCP bridge 시작을 백그라운드로 예약했습니다.");
-            result.Warnings.Add("bridge warmup은 비동기로 이어집니다. Quick Setup 직후에는 Unity Console 또는 Unity MCP 창 상태를 함께 확인해 주세요.");
+            result.Steps.Add("Scheduled MCP bridge startup in the background.");
+            result.Warnings.Add("Bridge warmup continues asynchronously. Right after Quick Setup, also check the Unity Console or the Unity MCP window status.");
         }
 
         private static void CheckAuthMode(UnityResourceRagEditorSettings settings, UnityResourceRagQuickSetupResult result)
@@ -148,11 +148,11 @@ namespace UnityResourceRag.Editor
             {
                 if (settings.HasReadableCodexAuthFile)
                 {
-                    result.Steps.Add($"Codex 로그인 파일을 찾았습니다: {settings.CodexAuthFile}");
+                    result.Steps.Add($"Found the Codex auth file: {settings.CodexAuthFile}");
                 }
                 else
                 {
-                    result.Warnings.Add("Codex 로그인 파일을 찾지 못했습니다. build는 `recommended_auto` 또는 local fallback으로 계속 시도되지만, OpenAI 호출은 실패할 수 있습니다.");
+                    result.Warnings.Add("The Codex auth file was not found. The build can still continue with `recommended_auto` or local fallback, but OpenAI calls may fail.");
                 }
                 return;
             }
@@ -162,16 +162,16 @@ namespace UnityResourceRag.Editor
                 string envName = settings.ProviderApiKeyEnv;
                 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(envName)))
                 {
-                    result.Warnings.Add($"환경 변수 `{envName}` 가 현재 비어 있습니다.");
+                    result.Warnings.Add($"The environment variable `{envName}` is currently empty.");
                 }
                 else
                 {
-                    result.Steps.Add($"API key 환경 변수 `{envName}` 를 사용하도록 준비했습니다.");
+                    result.Steps.Add($"Prepared to use the API key environment variable `{envName}`.");
                 }
                 return;
             }
 
-            result.Steps.Add("offline local fallback 모드로 설정했습니다.");
+            result.Steps.Add("Configured the window to use Offline local fallback mode.");
         }
 
         private static void SyncCodexConfig(UnityResourceRagEditorSettings settings, UnityResourceRagQuickSetupResult result)

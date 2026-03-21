@@ -56,8 +56,8 @@ namespace UnityResourceRag.Editor
             var lines = new List<string>
             {
                 doctorResult != null && doctorResult.Success
-                    ? "Readiness check를 마쳤습니다."
-                    : "현재 설정 기준 readiness 상태를 정리했습니다.",
+                    ? "Readiness check completed."
+                    : "Current readiness status summary:",
             };
 
             foreach (UnityResourceRagReadinessItem item in items)
@@ -107,7 +107,7 @@ namespace UnityResourceRag.Editor
         {
             if (result == null)
             {
-                return "Case export 결과가 없습니다.";
+                return "No case export result is available.";
             }
 
             var lines = new List<string>
@@ -130,8 +130,8 @@ namespace UnityResourceRag.Editor
             else
             {
                 lines.Add("Next:");
-                lines.Add("- case-report.md에 실제 화면 품질 메모를 보강한 뒤 GitHub issue나 release follow-up에 붙입니다.");
-                lines.Add("- 이후 같은 화면에서 수정 전/후 결과를 비교할 때 같은 case folder를 기준 artifact로 씁니다.");
+                lines.Add("- Add real project quality notes to `case-report.md` before attaching it to a GitHub issue or release follow-up.");
+                lines.Add("- Reuse the same case folder as the comparison baseline when you revisit the same screen later.");
             }
 
             return string.Join("\n", lines);
@@ -151,7 +151,7 @@ namespace UnityResourceRag.Editor
         {
             if (!result.Success)
             {
-                return "결과 스크린샷을 캡처하지 못했습니다.\n" + (string.IsNullOrWhiteSpace(result.Error) ? "Unknown error." : result.Error);
+                return "Failed to capture the result screenshot.\n" + (string.IsNullOrWhiteSpace(result.Error) ? "Unknown error." : result.Error);
             }
 
             JObject payload = result.Payload;
@@ -159,7 +159,7 @@ namespace UnityResourceRag.Editor
             string relativePath = payload?.Value<string>("capturedPathRelative") ?? string.Empty;
             var lines = new List<string>
             {
-                "결과 스크린샷을 저장했습니다.",
+                "Saved the result screenshot.",
                 $"Screenshot: {screenshotPath}",
             };
             if (!string.IsNullOrWhiteSpace(relativePath))
@@ -168,8 +168,8 @@ namespace UnityResourceRag.Editor
             }
 
             lines.Add("Next:");
-            lines.Add("- 캡처 결과를 보고 spacing, asset choice, hierarchy를 빠르게 점검합니다.");
-            lines.Add("- reference build였다면 같은 창에서 Repair Handoff를 실행할 수 있습니다.");
+            lines.Add("- Review the capture for spacing, asset choice, and hierarchy issues.");
+            lines.Add("- If this was a reference-based build, you can run Repair Handoff from the same window.");
             return string.Join("\n", lines);
         }
 
@@ -177,13 +177,13 @@ namespace UnityResourceRag.Editor
         {
             if (!result.Success)
             {
-                return "Repair handoff를 만들지 못했습니다.\n" + (string.IsNullOrWhiteSpace(result.Error) ? "Unknown error." : result.Error);
+                return "Failed to create the repair handoff.\n" + (string.IsNullOrWhiteSpace(result.Error) ? "Unknown error." : result.Error);
             }
 
             JObject payload = result.Payload;
             var lines = new List<string>
             {
-                "Repair handoff를 만들었습니다.",
+                "Created the repair handoff.",
             };
 
             AppendIfPresent(lines, "Verification Report", payload?.Value<string>("verificationReport"));
@@ -193,13 +193,13 @@ namespace UnityResourceRag.Editor
             if ((payload?.Value<bool?>("hasErrors") ?? false))
             {
                 lines.Add("Attention:");
-                lines.Add("- verification workflow 안에 일부 에러가 있습니다. report 파일을 먼저 확인해 주세요.");
+                lines.Add("- The verification workflow reported one or more errors. Review the report file first.");
             }
             else
             {
                 lines.Add("Next:");
-                lines.Add("- repair handoff를 기준으로 작은 수정부터 적용합니다.");
-                lines.Add("- 수정 후에는 다시 캡처해서 비교 결과를 확인합니다.");
+                lines.Add("- Apply small follow-up fixes starting from the repair handoff.");
+                lines.Add("- Capture the result again after changes and compare the new output.");
             }
 
             return string.Join("\n", lines);
@@ -265,7 +265,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Sidecar Repo",
                     Level = UnityResourceRagReadinessLevel.Ready,
-                    Summary = "one-click build에 필요한 full unity-resource-rag checkout을 찾았습니다.",
+                    Summary = "Found a full unity-resource-rag checkout for the one-click workflow.",
                     NextStep = settings.SidecarRepoRoot,
                 };
             }
@@ -274,8 +274,8 @@ namespace UnityResourceRag.Editor
             {
                 Title = "Sidecar Repo",
                 Level = UnityResourceRagReadinessLevel.Blocked,
-                Summary = "현재 경로만으로는 Python sidecar를 실행할 수 없습니다.",
-                NextStep = "Sidecar Repo Root에 full unity-resource-rag checkout 경로를 지정해 주세요.",
+                Summary = "The current path is not enough to run the Python sidecar.",
+                NextStep = "Set Sidecar Repo Root to a full unity-resource-rag checkout path.",
             };
         }
 
@@ -289,7 +289,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Python Runtime",
                     Level = UnityResourceRagReadinessLevel.Ready,
-                    Summary = "repo-local Python runtime이 준비되어 있습니다.",
+                    Summary = "The repo-local Python runtime is ready.",
                     NextStep = repoVenvPython,
                 };
             }
@@ -300,8 +300,8 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Python Runtime",
                     Level = UnityResourceRagReadinessLevel.Attention,
-                    Summary = "작동 가능한 Python은 찾았지만 repo-local runtime은 아직 고정되지 않았습니다.",
-                    NextStep = $"Bootstrap Python Runtime을 실행하거나 `{detectedPython}` 를 그대로 사용할 수 있습니다.",
+                    Summary = "A working Python executable was found, but the repo-local runtime is not pinned yet.",
+                    NextStep = $"Run Bootstrap Python Runtime or continue with `{detectedPython}` as-is.",
                 };
             }
 
@@ -309,8 +309,8 @@ namespace UnityResourceRag.Editor
             {
                 Title = "Python Runtime",
                 Level = UnityResourceRagReadinessLevel.Blocked,
-                Summary = "sidecar dependency를 로드할 수 있는 Python runtime이 아직 없습니다.",
-                NextStep = "Bootstrap Python Runtime을 실행해 `.venv` 와 requirements를 준비해 주세요.",
+                Summary = "No Python runtime is currently ready to load the sidecar dependencies.",
+                NextStep = "Run Bootstrap Python Runtime to prepare `.venv` and install the required packages.",
             };
         }
 
@@ -325,7 +325,7 @@ namespace UnityResourceRag.Editor
                         {
                             Title = "Provider Login",
                             Level = UnityResourceRagReadinessLevel.Ready,
-                            Summary = "기존 Codex 로그인 정보를 그대로 재사용할 수 있습니다.",
+                            Summary = "The existing Codex login can be reused as-is.",
                             NextStep = settings.CodexAuthFile,
                         };
                     }
@@ -334,8 +334,8 @@ namespace UnityResourceRag.Editor
                     {
                         Title = "Provider Login",
                         Level = UnityResourceRagReadinessLevel.Attention,
-                        Summary = "Codex 로그인 파일을 아직 찾지 못했습니다.",
-                        NextStep = "Codex에 로그인했는지 확인하거나 Offline local로 먼저 테스트해 보세요.",
+                        Summary = "The Codex auth file has not been found yet.",
+                        NextStep = "Check whether you are signed in to Codex, or switch to Offline local for a first test.",
                     };
                 case UnityResourceRagAuthMode.UseApiKeyEnvironmentVariable:
                     if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(settings.ProviderApiKeyEnv)))
@@ -344,8 +344,8 @@ namespace UnityResourceRag.Editor
                         {
                             Title = "Provider Login",
                             Level = UnityResourceRagReadinessLevel.Ready,
-                            Summary = $"API key 환경 변수 `{settings.ProviderApiKeyEnv}` 를 사용할 준비가 됐습니다.",
-                            NextStep = "이 모드에서는 API key env가 우선 사용됩니다.",
+                            Summary = $"The API key environment variable `{settings.ProviderApiKeyEnv}` is ready to use.",
+                            NextStep = "This mode will prefer the configured API key environment variable.",
                         };
                     }
 
@@ -353,16 +353,16 @@ namespace UnityResourceRag.Editor
                     {
                         Title = "Provider Login",
                         Level = UnityResourceRagReadinessLevel.Attention,
-                        Summary = $"API key 환경 변수 `{settings.ProviderApiKeyEnv}` 가 비어 있습니다.",
-                        NextStep = "환경 변수를 채우거나 Use existing Codex login으로 바꿔 보세요.",
+                        Summary = $"The API key environment variable `{settings.ProviderApiKeyEnv}` is empty.",
+                        NextStep = "Set the environment variable or switch back to Use existing Codex login.",
                     };
                 default:
                     return new UnityResourceRagReadinessItem
                     {
                         Title = "Provider Login",
                         Level = UnityResourceRagReadinessLevel.Ready,
-                        Summary = "Offline local fallback으로 테스트를 진행할 수 있습니다.",
-                        NextStep = "인터넷 연결 없이도 catalog-first 초안과 apply 흐름을 확인할 수 있습니다.",
+                        Summary = "Offline local fallback is available for testing.",
+                        NextStep = "You can still verify the catalog-first draft and apply flow without an internet connection.",
                     };
             }
         }
@@ -376,8 +376,8 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Unity Editor Connection",
                     Level = UnityResourceRagReadinessLevel.Attention,
-                    Summary = "아직 readiness 확인을 실행하지 않았습니다.",
-                    NextStep = "Refresh Readiness를 눌러 Unity MCP 연결 상태를 확인해 주세요.",
+                    Summary = "No readiness refresh has been run yet.",
+                    NextStep = "Press Refresh Readiness to verify the Unity MCP connection.",
                 };
             }
 
@@ -392,7 +392,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Unity Editor Connection",
                     Level = UnityResourceRagReadinessLevel.Ready,
-                    Summary = "Unity Editor와 필요한 build tool 연결이 준비됐습니다.",
+                    Summary = "The Unity Editor connection and required build tools are ready.",
                     NextStep = settings.UnityMcpRpcUrl,
                 };
             }
@@ -403,8 +403,8 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Unity Editor Connection",
                     Level = UnityResourceRagReadinessLevel.Blocked,
-                    Summary = "Unity Editor는 보이지만 필요한 build tool이 아직 전부 준비되진 않았습니다.",
-                    NextStep = "Quick Setup을 다시 실행하고, Local HTTP Server와 custom tool 노출 상태를 확인해 주세요.",
+                    Summary = "The Unity Editor is reachable, but one or more required build tools are still missing.",
+                    NextStep = "Run Quick Setup again and verify the Local HTTP Server and custom tool exposure.",
                 };
             }
 
@@ -414,8 +414,8 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Unity Editor Connection",
                     Level = UnityResourceRagReadinessLevel.Attention,
-                    Summary = "UI build는 가능한 상태지만 catalog/resource 정보는 일부만 보입니다.",
-                    NextStep = "대부분의 build는 계속 진행할 수 있습니다. raw catalog browsing이 필요할 때만 추가 확인해 주세요.",
+                    Summary = "UI builds can continue, but only part of the catalog or resource information is visible.",
+                    NextStep = "Most builds can still continue. Investigate further only if you need raw catalog browsing.",
                 };
             }
 
@@ -423,10 +423,10 @@ namespace UnityResourceRag.Editor
             {
                 Title = "Unity Editor Connection",
                 Level = UnityResourceRagReadinessLevel.Attention,
-                Summary = "Unity Editor readiness에 확인이 필요한 항목이 있습니다.",
+                Summary = "The Unity Editor readiness state still has items that need attention.",
                 NextStep = FirstNonEmpty(
                     (check["nextActions"] as JArray)?.First?.ToString(),
-                    "Quick Setup 또는 Refresh Readiness를 다시 실행해 주세요."),
+                    "Run Quick Setup or Refresh Readiness again."),
             };
         }
 
@@ -444,8 +444,8 @@ namespace UnityResourceRag.Editor
                     Title = "Build Input",
                     Level = UnityResourceRagReadinessLevel.Ready,
                     Summary = catalogReady
-                        ? "reference image와 project catalog가 준비돼 있습니다."
-                        : "reference image는 준비됐고, catalog는 필요하면 build 중에 다시 확인합니다.",
+                        ? "The reference image and project catalog are ready."
+                        : "The reference image is ready, and the catalog will be checked again during the build if needed.",
                     NextStep = settings.ReferenceImagePath,
                 };
             }
@@ -457,8 +457,8 @@ namespace UnityResourceRag.Editor
                     Title = "Build Input",
                     Level = UnityResourceRagReadinessLevel.Ready,
                     Summary = catalogReady
-                        ? "catalog-first draft를 시작할 입력이 준비돼 있습니다."
-                        : "goal/title/body는 준비됐고, catalog가 없으면 첫 build에서 생성합니다.",
+                        ? "The inputs required for a catalog-first draft are ready."
+                        : "Goal, title, and body are ready. The first build will create the catalog if it does not exist yet.",
                     NextStep = string.IsNullOrWhiteSpace(settings.Goal) ? settings.Title : settings.Goal,
                 };
             }
@@ -467,8 +467,8 @@ namespace UnityResourceRag.Editor
             {
                 Title = "Build Input",
                 Level = UnityResourceRagReadinessLevel.Blocked,
-                Summary = "reference image 또는 catalog-first draft 입력이 필요합니다.",
-                NextStep = "Reference Image를 넣거나 Goal/Title/Body를 채워 주세요.",
+                Summary = "A reference image or catalog-first draft input is required.",
+                NextStep = "Provide a Reference Image or fill in Goal, Title, and Body.",
             };
         }
 
@@ -477,7 +477,7 @@ namespace UnityResourceRag.Editor
             JObject payload = result.Payload;
             if (payload == null)
             {
-                return string.IsNullOrWhiteSpace(result.Summary) ? "UI build를 마쳤습니다." : result.Summary;
+                return string.IsNullOrWhiteSpace(result.Summary) ? "UI build completed." : result.Summary;
             }
 
             string routeLabel = ExtractRouteLabel(payload);
@@ -487,7 +487,7 @@ namespace UnityResourceRag.Editor
 
             var lines = new List<string>
             {
-                "UI build를 마쳤습니다.",
+                "UI build completed.",
                 $"Flow: {routeLabel}",
             };
 
@@ -521,7 +521,7 @@ namespace UnityResourceRag.Editor
         private static string FormatFailedBuildReport(UnityResourceRagLocalToolResult result)
         {
             var builder = new StringBuilder();
-            builder.AppendLine("UI build를 완료하지 못했습니다.");
+            builder.AppendLine("UI build did not complete.");
             builder.AppendLine(string.IsNullOrWhiteSpace(result.Error) ? "Unknown error." : result.Error);
 
             JObject details = result.RawResponse?["details"] as JObject;
@@ -529,9 +529,9 @@ namespace UnityResourceRag.Editor
             if (ContainsTimeout(result.Error))
             {
                 builder.AppendLine("Try this next:");
-                builder.AppendLine("- Start UI Build를 한 번 더 실행해 일시적인 Unity Editor busy 상태였는지 확인합니다.");
-                builder.AppendLine("- Unity MCP Timeout 값을 더 크게 올립니다. 무거운 프로젝트는 120000~180000ms가 더 안전할 수 있습니다.");
-                builder.AppendLine("- Unity Console에서 compile/import가 끝났는지 확인한 뒤 다시 시도합니다.");
+                builder.AppendLine("- Run Start UI Build once more to confirm whether the Unity Editor was only temporarily busy.");
+                builder.AppendLine("- Increase the Unity MCP Timeout value. Heavier projects may need 120000 to 180000 ms.");
+                builder.AppendLine("- Check the Unity Console to make sure compile and import have finished before retrying.");
             }
 
             if (doctor != null)
@@ -554,8 +554,8 @@ namespace UnityResourceRag.Editor
                 {
                     builder.AppendLine($"Missing Python module: {missingModule}");
                     builder.AppendLine("Try this next:");
-                    builder.AppendLine("- Bootstrap Python Runtime을 먼저 실행해 repo-local `.venv` 를 준비합니다.");
-                    builder.AppendLine("- 그래도 같으면 Python Executable에 requirements가 설치된 interpreter 경로를 직접 넣습니다.");
+                    builder.AppendLine("- Run Bootstrap Python Runtime first to prepare the repo-local `.venv`.");
+                    builder.AppendLine("- If the problem continues, set Python Executable to an interpreter that already has the requirements installed.");
                 }
             }
 

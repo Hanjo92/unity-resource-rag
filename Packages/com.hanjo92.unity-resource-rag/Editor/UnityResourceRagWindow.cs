@@ -67,7 +67,7 @@ namespace UnityResourceRag.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Unity Resource RAG", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "이 창은 Unity MCP 위에 얹는 Unity Resource RAG 애드온입니다. Quick Setup으로 연결을 맞추고, Readiness를 확인한 뒤, Start UI Build로 생성하고, Capture & Repair와 Case Export로 후속 검증까지 이어갈 수 있습니다.",
+                "This window is the Unity Resource RAG add-on layered on top of Unity MCP. Use Quick Setup to configure the connection, check Readiness, run Start UI Build, and continue with Capture & Repair and Case Export from the same window.",
                 MessageType.Info);
 
             bool settingsChanged = false;
@@ -131,7 +131,7 @@ namespace UnityResourceRag.Editor
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("Quick Setup", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Quick Setup은 Unity MCP transport, custom tool 노출, Codex config sidecar entry를 맞춥니다. Python 의존성은 아래 Bootstrap Python Runtime이 맡습니다.",
+                "Quick Setup configures the Unity MCP transport, custom tool exposure, and the Codex sidecar entry. Python dependencies are handled by Bootstrap Python Runtime below.",
                 MessageType.None);
 
             settings.AuthMode = (UnityResourceRagAuthMode)EditorGUILayout.EnumPopup("Auth Mode", settings.AuthMode);
@@ -194,7 +194,7 @@ namespace UnityResourceRag.Editor
                 () => settings.ReferenceImagePath = EditorUtility.OpenFilePanel("Select reference image", settings.ReferenceImagePath, "png,jpg,jpeg"));
 
             EditorGUILayout.HelpBox(
-                "Reference image가 있으면 reference-first build를, 비워두면 catalog-first draft를 탑니다. build 전에 readiness를 다시 확인하고, 성공하면 바로 Unity apply까지 이어집니다.",
+                "If a reference image is provided, the window runs the reference-first build path. If it is empty, it falls back to the catalog-first draft path. The window rechecks readiness before the build and continues to Unity apply on success.",
                 MessageType.None);
 
             settings.Goal = EditorGUILayout.TextField("Goal", settings.Goal);
@@ -238,14 +238,14 @@ namespace UnityResourceRag.Editor
             bool canRepair = CanRepairCurrentResult(settings);
             if (!canCapture)
             {
-                EditorGUILayout.HelpBox("성공한 build 결과가 있어야 결과 스크린샷을 바로 캡처할 수 있습니다.", MessageType.None);
+                EditorGUILayout.HelpBox("A successful build result is required before you can capture the current Unity output.", MessageType.None);
             }
             else if (!canRepair)
             {
                 EditorGUILayout.HelpBox(
                     string.IsNullOrWhiteSpace(settings.ReferenceImagePath)
-                        ? "Reference image가 없으면 결과 캡처까지만 진행됩니다. Repair handoff는 reference image가 있을 때만 만들 수 있습니다."
-                        : "캡처 후 Repair Handoff를 실행해 reference 대비 mismatch report를 만들 수 있습니다.",
+                        ? "Without a reference image, this flow stops at result capture. Repair handoff is only available when a reference image is present."
+                        : "After capture, you can run Repair Handoff to generate a mismatch report against the reference.",
                     MessageType.None);
             }
 
@@ -284,7 +284,7 @@ namespace UnityResourceRag.Editor
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("Case Export", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "실프로젝트 품질 검토를 쌓기 위해 build/capture/repair 결과를 md/json 케이스 리포트로 저장합니다. GitHub issue나 release follow-up에 바로 붙이기 좋은 형태로 남깁니다.",
+                "Save build, capture, and repair results as markdown and JSON case reports so real-project quality reviews are easy to track and attach to follow-up issues or release notes.",
                 MessageType.None);
 
             _caseName = EditorGUILayout.TextField("Case Name", _caseName);
@@ -372,7 +372,7 @@ namespace UnityResourceRag.Editor
         private void RunRuntimeBootstrap(UnityResourceRagEditorSettings settings)
         {
             _isBootstrapRunning = true;
-            _bootstrapReport = "Python runtime bootstrap을 시작했습니다.\nrepo-local `.venv` 생성과 requirements 설치를 백그라운드에서 진행합니다.";
+            _bootstrapReport = "Starting Python runtime bootstrap.\nThe window is preparing a repo-local `.venv` and installing requirements in the background.";
             Repaint();
 
             if (!UnityResourceRagRuntimeBootstrapService.TryRunAsync(settings, OnRuntimeBootstrapCompleted, out string error))
@@ -404,7 +404,7 @@ namespace UnityResourceRag.Editor
         private void RunReadinessRefresh(UnityResourceRagEditorSettings settings)
         {
             _isReadinessRunning = true;
-            _readinessReport = "Readiness를 다시 확인하고 있습니다.";
+            _readinessReport = "Refreshing readiness status.";
             Repaint();
 
             if (!UnityResourceRagLocalRunner.TryRunDoctorAsync(settings, OnReadinessRefreshCompleted, out string error))
@@ -448,7 +448,7 @@ namespace UnityResourceRag.Editor
 
             _isBuildRunning = true;
             _buildPhase = "1/2 Checking readiness before build...";
-            _buildReport = "Build 전 readiness를 다시 확인하고 있습니다.";
+            _buildReport = "Rechecking readiness before the build starts.";
             _captureResult = null;
             _repairResult = null;
             _captureReport = string.Empty;
@@ -475,7 +475,7 @@ namespace UnityResourceRag.Editor
             {
                 _isBuildRunning = false;
                 _buildPhase = "Build blocked";
-                _buildReport = "Readiness check 자체를 완료하지 못해 build를 시작하지 않았습니다.\n" + _readinessReport;
+                _buildReport = "The build did not start because the readiness check itself could not be completed.\n" + _readinessReport;
                 Debug.LogError("[Unity Resource RAG] " + result.Error);
                 Repaint();
                 return;
@@ -486,7 +486,7 @@ namespace UnityResourceRag.Editor
             {
                 _isBuildRunning = false;
                 _buildPhase = "Build blocked";
-                _buildReport = "막히는 readiness 항목이 있어 build를 시작하지 않았습니다.\n" + _readinessReport;
+                _buildReport = "The build did not start because one or more blocking readiness items still need attention.\n" + _readinessReport;
                 Debug.LogWarning("[Unity Resource RAG] Build was blocked by readiness.");
                 Repaint();
                 return;
@@ -494,7 +494,7 @@ namespace UnityResourceRag.Editor
 
             string routeLabel = string.IsNullOrWhiteSpace(settings.ReferenceImagePath) ? "catalog-first draft" : "reference-first build";
             _buildPhase = $"2/2 Running {routeLabel} and Unity apply...";
-            _buildReport = "Blueprint 생성과 Unity apply를 실행하고 있습니다.";
+            _buildReport = "Running blueprint generation and Unity apply.";
             Repaint();
 
             if (!UnityResourceRagLocalRunner.TryRunToolAsync(
@@ -544,7 +544,7 @@ namespace UnityResourceRag.Editor
             }
 
             _isCaptureRunning = true;
-            _captureReport = "현재 Unity 결과를 캡처하고 있습니다.";
+            _captureReport = "Capturing the current Unity result.";
             Repaint();
 
             if (!UnityResourceRagLocalRunner.TryRunCaptureResultAsync(settings, _buildResult.Payload, OnCaptureCompleted, out string error))
@@ -585,7 +585,7 @@ namespace UnityResourceRag.Editor
             string outputDirectory = BuildRepairOutputDirectory(capturedImagePath);
 
             _isRepairRunning = true;
-            _repairReport = "캡처 결과를 기준으로 repair handoff를 만들고 있습니다.";
+            _repairReport = "Building a repair handoff from the captured result.";
             Repaint();
 
             if (!UnityResourceRagLocalRunner.TryRunVerificationRepairAsync(settings, capturedImagePath, resolvedBlueprintPath, outputDirectory, OnRepairCompleted, out string error))

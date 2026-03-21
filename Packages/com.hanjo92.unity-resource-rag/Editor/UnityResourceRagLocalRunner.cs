@@ -211,7 +211,7 @@ namespace UnityResourceRag.Editor
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = "sidecar repo root가 유효하지 않습니다. full unity-resource-rag checkout 경로를 설정해 주세요.",
+                    Error = "The sidecar repo root is not valid. Set it to a full unity-resource-rag checkout path.",
                 };
                 return null;
             }
@@ -221,7 +221,7 @@ namespace UnityResourceRag.Editor
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = $"local runner를 찾지 못했습니다: {runnerPath}",
+                    Error = $"The local runner could not be found: {runnerPath}",
                 };
                 return null;
             }
@@ -230,7 +230,7 @@ namespace UnityResourceRag.Editor
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = "sidecar requirements를 로드할 수 있는 Python을 찾지 못했습니다. repo root에서 `pip install -r requirements.txt`를 실행한 interpreter를 지정해 주세요.",
+                    Error = "No Python executable that can load the sidecar requirements was found. Point Python Executable to an interpreter where `pip install -r requirements.txt` has already been run.",
                 };
                 return null;
             }
@@ -294,7 +294,7 @@ namespace UnityResourceRag.Editor
                 {
                     return new UnityResourceRagLocalToolResult
                     {
-                        Error = "Python process를 시작하지 못했습니다.",
+                        Error = "Failed to start the Python process.",
                     };
                 }
 
@@ -383,7 +383,7 @@ namespace UnityResourceRag.Editor
         {
             if (payload == null)
             {
-                return "빌드 결과 payload가 없습니다.";
+                return "The build result payload is missing.";
             }
 
             string selectedPath = payload.Value<string>("selectedPath") ?? "unknown";
@@ -402,10 +402,10 @@ namespace UnityResourceRag.Editor
 
             if (string.IsNullOrWhiteSpace(blueprintPath))
             {
-                return $"경로: {routeLabel} / doctor: {overallStatus}";
+                return $"Path: {routeLabel} / doctor: {overallStatus}";
             }
 
-            return $"경로: {routeLabel} / doctor: {overallStatus} / blueprint: {blueprintPath}";
+            return $"Path: {routeLabel} / doctor: {overallStatus} / blueprint: {blueprintPath}";
         }
 
         private static string Quote(string value)
