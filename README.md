@@ -18,6 +18,7 @@
 ### Unity 쪽
 
 - Custom tool: `index_project_resources`
+- Custom tool: `query_ui_asset_catalog`
 - Resource: `ui_asset_catalog`
 - Custom tool: `apply_ui_blueprint`
 
@@ -61,7 +62,7 @@ pip install -r requirements.txt
 1. Unity 프로젝트에 `unity-mcp`를 설치한다.
 2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag)를 `Packages/` 아래에 두거나 Git URL로 설치한다.
 3. Unity MCP를 HTTP Local로 쓸 때는 `Project Scoped Tools`를 끄고 Local HTTP Server를 다시 시작한다. 이 설정이 켜져 있으면 일부 클라이언트에서는 custom tool이 `execute_custom_tool` 뒤에만 보일 수 있다.
-4. Unity에서 discovery와 resource registration이 완료되면 `index_project_resources`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 사용할 수 있다.
+4. Unity에서 discovery와 resource registration이 완료되면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 사용할 수 있다.
 5. sidecar와 gateway를 같이 띄울 때는 `unity-mcp`의 기본 `127.0.0.1:8080/mcp`와 겹치지 않도록 gateway 기본 URL `http://127.0.0.1:8090`을 사용한다.
 
 패키지 상세 문서는 [Packages/com.hanjo92.unity-resource-rag/README.md](./Packages/com.hanjo92.unity-resource-rag/README.md)에서 확인할 수 있다.
@@ -73,7 +74,7 @@ pip install -r requirements.txt
 - `unity-mcp`: Unity Editor를 실제로 조작
 - 이 저장소의 MCP server: planning / retrieval / repair sidecar를 담당
 
-`ui_asset_catalog`는 callable custom tool이 아니라 MCP resource다. tool 목록이 아니라 resource 목록에서 읽는 경로라는 점을 기준으로 연결하면 덜 헷갈린다.
+대부분의 사용자는 `query_ui_asset_catalog` tool만 써도 된다. `ui_asset_catalog`는 같은 내용을 raw MCP resource로 노출하는 경로라서, resource를 잘 다루는 클라이언트에서만 직접 읽으면 된다.
 
 실사용용 전체 예시는 [examples/mcp/mcp-client-config.with-unity-mcp.example.json](./examples/mcp/mcp-client-config.with-unity-mcp.example.json)에 있고, key 설명은 [examples/mcp/mcp-client-config.with-unity-mcp.example.md](./examples/mcp/mcp-client-config.with-unity-mcp.example.md)에서 볼 수 있다.
 

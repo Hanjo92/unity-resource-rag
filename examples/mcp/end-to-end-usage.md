@@ -40,6 +40,18 @@ python3 pipeline/indexer/inspect_catalog.py \
   Library/ResourceRag/resource_catalog.jsonl
 ```
 
+If the client handles tools better than resources, inspect the catalog through the Unity custom tool:
+
+```json
+{
+  "tool": "query_ui_asset_catalog",
+  "parameters": {
+    "pageSize": 10,
+    "pageNumber": 1
+  }
+}
+```
+
 ## 4. Extract And Bind
 
 From a reference image:

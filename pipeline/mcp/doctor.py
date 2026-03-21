@@ -33,7 +33,7 @@ else:
 DEFAULT_UNITY_MCP_URL = "http://127.0.0.1:8080/mcp"
 DEFAULT_UNITY_MCP_TIMEOUT_MS = 3000
 DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
-EXPECTED_UNITY_TOOLS = ("index_project_resources", "apply_ui_blueprint")
+EXPECTED_UNITY_TOOLS = ("index_project_resources", "query_ui_asset_catalog", "apply_ui_blueprint")
 EXPECTED_UNITY_RESOURCES = ("ui_asset_catalog",)
 
 

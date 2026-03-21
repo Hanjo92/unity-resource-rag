@@ -52,7 +52,7 @@ class DoctorToolTests(unittest.TestCase):
         def fake_post_json_rpc(url: str, method: str, params: dict[str, object] | None, timeout_ms: int, request_id: int) -> dict[str, object]:
             self.assertEqual(url, "http://127.0.0.1:8080/mcp")
             if method == "tools/list":
-                return {"tools": [{"name": "index_project_resources"}, {"name": "apply_ui_blueprint"}]}
+                return {"tools": [{"name": "index_project_resources"}, {"name": "query_ui_asset_catalog"}, {"name": "apply_ui_blueprint"}]}
             if method == "resources/list":
                 return {"resources": [{"name": "ui_asset_catalog"}]}
             raise AssertionError(f"Unexpected method: {method}")
@@ -109,7 +109,7 @@ class DoctorToolTests(unittest.TestCase):
 
         def fake_post_json_rpc(url: str, method: str, params: dict[str, object] | None, timeout_ms: int, request_id: int) -> dict[str, object]:
             if method == "tools/list":
-                return {"tools": [{"name": "index_project_resources"}, {"name": "apply_ui_blueprint"}]}
+                return {"tools": [{"name": "index_project_resources"}, {"name": "query_ui_asset_catalog"}, {"name": "apply_ui_blueprint"}]}
             if method == "resources/list":
                 return {"resources": [{"name": "ui_asset_catalog"}]}
             raise AssertionError(f"Unexpected method: {method}")
