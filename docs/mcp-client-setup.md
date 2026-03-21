@@ -175,7 +175,7 @@ JSON에는 주석을 넣을 수 없으므로, key별 설명은 [examples/mcp/mcp
 서버별 역할은 다음처럼 나뉜다.
 
 - `unity-mcp` entry: Unity Editor 연결, scene 조작, `execute_custom_tool`, `manage_camera` 같은 Unity 쪽 실행을 담당한다.
-- `unity-resource-rag` entry: `unity_rag.inspect_provider_setup`, `unity_rag.extract_reference_layout`, `unity_rag.run_reference_to_resolved_blueprint`, `unity_rag.run_verification_repair_loop`, `unity_rag.build_mcp_handoff_bundle` 같은 sidecar workflow를 담당한다.
+- `unity-resource-rag` entry: `unity_rag.doctor`, `unity_rag.run_first_pass_ui_build`, `unity_rag.inspect_provider_setup`, `unity_rag.extract_reference_layout`, `unity_rag.run_reference_to_resolved_blueprint`, `unity_rag.run_verification_repair_loop`, `unity_rag.build_mcp_handoff_bundle` 같은 sidecar workflow를 담당한다.
 
 권장 흐름은 `unity-resource-rag`로 blueprint / repair handoff를 만든 뒤, 생성된 handoff bundle을 `unity-mcp` 쪽 `apply_ui_blueprint`와 `manage_camera`로 넘기는 방식이다.
 
@@ -185,6 +185,19 @@ JSON에는 주석을 넣을 수 없으므로, key별 설명은 [examples/mcp/mcp
 {
   "tool": "unity_rag.doctor",
   "arguments": {
+    "unity_project_path": "/absolute/path/to/unity-project",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+첫 성공 경로를 가장 짧게 밟고 싶다면 다음 tool을 권장한다. catalog가 없으면 Unity에서 `index_project_resources`를 먼저 호출하고, resolved blueprint 생성과 Unity apply까지 한 번에 이어서 처리한다.
+
+```json
+{
+  "tool": "unity_rag.run_first_pass_ui_build",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
     "unity_project_path": "/absolute/path/to/unity-project",
     "connection_preset": "recommended_auto"
   }

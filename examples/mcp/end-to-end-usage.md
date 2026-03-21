@@ -16,7 +16,24 @@
 
 응답에서 `overallStatus`가 `ok` 또는 작업 가능한 `warn`이고 `nextActions`가 정리되면 다음 단계로 넘어간다.
 
-## 2. Inspect Provider Setup
+## 2. One-Click First Pass
+
+가장 짧은 happy path는 이 tool 하나다.
+
+```json
+{
+  "tool": "unity_rag.run_first_pass_ui_build",
+  "arguments": {
+    "image": "/absolute/path/to/reference.png",
+    "unity_project_path": "/absolute/path/to/unity-project",
+    "connection_preset": "recommended_auto"
+  }
+}
+```
+
+이 호출은 필요하면 `index_project_resources`를 먼저 실행하고, resolved blueprint 생성과 Unity `apply_ui_blueprint` validate/apply까지 이어서 수행한다.
+
+## 3. Inspect Provider Setup
 
 실제 워크플로우를 실행하기 전에 연결 설정이 어떻게 해석되는지 먼저 확인한다.
 
@@ -31,7 +48,7 @@
 
 응답에서 `missingSettings`가 비어 있고 `nextActions`가 실행 가능 상태를 안내하면 다음 단계로 넘어간다.
 
-## 3. Build The Catalog
+## 4. Build The Catalog
 
 Run the Unity-side export tool first so the sidecar has real project assets to bind against.
 
@@ -52,7 +69,7 @@ If the client handles tools better than resources, inspect the catalog through t
 }
 ```
 
-## 4. Extract And Bind
+## 5. Extract And Bind
 
 From a reference image:
 
@@ -74,7 +91,7 @@ Outputs:
 - `03-binding-report.json`
 - `04-mcp-handoff.json`
 
-## 5. Execute In Unity MCP
+## 6. Execute In Unity MCP
 
 Use the resolved blueprint with `apply_ui_blueprint`.
 
@@ -118,7 +135,7 @@ Then capture a screenshot:
 }
 ```
 
-## 6. Repair If Needed
+## 7. Repair If Needed
 
 Compare the screenshot against the reference image:
 

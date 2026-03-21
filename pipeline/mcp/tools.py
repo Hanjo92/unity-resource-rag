@@ -7,12 +7,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 if __package__ in (None, ""):
     repo_root = Path(__file__).resolve().parents[2]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
-    from pipeline.mcp.doctor import build_doctor_payload
+    from pipeline.mcp.doctor import DEFAULT_UNITY_MCP_TIMEOUT_MS, DEFAULT_UNITY_MCP_URL, build_doctor_payload
     from pipeline.planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -21,7 +23,7 @@ if __package__ in (None, ""):
         inspect_provider_setup as inspect_provider_setup_config,
     )
 else:
-    from .doctor import build_doctor_payload
+    from .doctor import DEFAULT_UNITY_MCP_TIMEOUT_MS, DEFAULT_UNITY_MCP_URL, build_doctor_payload
     from ..planner.extract_reference_layout import (
         DEFAULT_DETAIL,
         DEFAULT_MAX_IMAGE_DIM,
@@ -33,6 +35,7 @@ else:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_ROOT = REPO_ROOT / "pipeline"
+DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
 
 PROVIDER_DESCRIPTION = (
     "추출 provider 선택. "
@@ -334,6 +337,50 @@ def _build_doctor_schema() -> dict[str, Any]:
     }
 
 
+def _build_run_first_pass_ui_build_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "image": {"type": "string", "description": "Path to the reference image."},
+            "reference_layout": {"type": "string", "description": "Existing reference layout JSON. Use this instead of image when already extracted."},
+            "unity_project_path": {"type": "string", "description": "Unity project root. Used to infer the default catalog path and validate local setup."},
+            "catalog": {"type": "string", "description": "Path to resource_catalog.jsonl. If omitted and unity_project_path is set, defaults to Library/ResourceRag/resource_catalog.jsonl."},
+            "vector_index": {"type": "string"},
+            "output_dir": {"type": "string"},
+            "screen_name": {"type": "string"},
+            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. Defaults to http://127.0.0.1:8080/mcp when Unity apply/index is enabled."},
+            "unity_mcp_timeout_ms": {"type": "integer", "minimum": 1, "description": "Unity MCP HTTP Local timeout in milliseconds."},
+            "force_reindex": {"type": "boolean", "description": "Force re-running index_project_resources before binding."},
+            "apply_in_unity": {"type": "boolean", "description": "When true, validate/apply the generated blueprint in Unity MCP.", "default": True},
+            "validate_before_apply": {"type": "boolean", "description": "When true, call apply_ui_blueprint validate before apply.", "default": True},
+            "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
+            "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
+            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
+            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
+            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
+            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
+            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
+            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
+            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
+            "model": {"type": "string"},
+            "detail": {"type": "string", "enum": ["low", "high", "auto"]},
+            "max_image_dim": {"type": "integer", "minimum": 1},
+            "hint": {"type": "array", "items": {"type": "string"}},
+            "safe_area_component_type": {"type": "string"},
+            "safe_area_properties": {"type": "string"},
+            "allow_partial": {"type": "boolean"},
+        },
+        "anyOf": [
+            {"required": ["image"]},
+            {"required": ["reference_layout"]},
+        ],
+        "additionalProperties": False,
+    }
+
+
 def _format_tool_result(title: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = {
         "title": title,
@@ -388,6 +435,168 @@ def _format_doctor_summary(payload: dict[str, Any]) -> str:
         lines.append("next actions:")
         lines.extend(f"- {item}" for item in next_actions)
     return "\n".join(lines)
+
+
+def _extract_wrapped_payload(result: dict[str, Any]) -> dict[str, Any]:
+    content = result.get("content") or []
+    if not isinstance(content, list) or not content:
+        return {}
+    raw = content[0].get("text")
+    if not isinstance(raw, str):
+        return {}
+    parsed = json.loads(raw)
+    if isinstance(parsed, dict) and isinstance(parsed.get("payload"), dict):
+        return parsed["payload"]
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
+def _resolve_optional_path(raw: Any) -> Path | None:
+    if raw in (None, ""):
+        return None
+    return Path(str(raw)).expanduser().resolve()
+
+
+def _resolve_catalog_path(raw_catalog: Any, unity_project_path: Path | None) -> Path | None:
+    if raw_catalog not in (None, ""):
+        catalog_path = Path(str(raw_catalog)).expanduser()
+        if unity_project_path is not None and not catalog_path.is_absolute():
+            return (unity_project_path / catalog_path).resolve()
+        return catalog_path.resolve()
+    if unity_project_path is None:
+        return None
+    return (unity_project_path / DEFAULT_CATALOG_RELATIVE_PATH).resolve()
+
+
+def _http_json_request(url: str, method: str, params: dict[str, Any] | None, timeout_ms: int, request_id: int) -> dict[str, Any]:
+    payload = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": method,
+        "params": params or {},
+    }
+    encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib_request.Request(
+        url,
+        data=encoded,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=max(timeout_ms / 1000.0, 1.0)) as response:
+            raw = response.read().decode("utf-8")
+    except (urllib_error.URLError, urllib_error.HTTPError) as exc:
+        raise ToolExecutionError(f"Unity MCP request failed: {exc}") from exc
+
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError as exc:
+        raise ToolExecutionError(
+            "Unity MCP returned invalid JSON.",
+            details={"rawResponse": raw},
+        ) from exc
+
+    if data.get("error"):
+        raise ToolExecutionError(
+            "Unity MCP returned an error.",
+            details={"unityMcpError": data["error"]},
+        )
+
+    result = data.get("result")
+    if not isinstance(result, dict):
+        raise ToolExecutionError(
+            "Unity MCP returned an unexpected result shape.",
+            details={"unityMcpResponse": data},
+        )
+    return result
+
+
+def _list_unity_mcp_tools(unity_mcp_url: str, timeout_ms: int) -> list[str]:
+    result = _http_json_request(unity_mcp_url, "tools/list", {}, timeout_ms, 1)
+    return sorted(
+        str(item.get("name"))
+        for item in result.get("tools", [])
+        if isinstance(item, dict) and item.get("name")
+    )
+
+
+def _decode_mcp_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict):
+        return structured
+
+    content = result.get("content")
+    if isinstance(content, list):
+        parsed_candidates: list[dict[str, Any]] = []
+        raw_texts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            raw_texts.append(text)
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                parsed_candidates.append(parsed)
+        if parsed_candidates:
+            return parsed_candidates[-1]
+        if raw_texts:
+            return {"rawText": "\n".join(raw_texts)}
+
+    if isinstance(result, dict):
+        return result
+    return {}
+
+
+def _call_unity_mcp_tool(
+    unity_mcp_url: str,
+    available_tools: list[str],
+    tool_name: str,
+    arguments: dict[str, Any],
+    timeout_ms: int,
+) -> dict[str, Any]:
+    if tool_name in available_tools:
+        request_name = tool_name
+        request_arguments = arguments
+        invocation_mode = "direct"
+    elif "execute_custom_tool" in available_tools:
+        request_name = "execute_custom_tool"
+        request_arguments = {
+            "customToolName": tool_name,
+            "parameters": arguments,
+        }
+        invocation_mode = "execute_custom_tool"
+    else:
+        raise ToolExecutionError(
+            f"Unity MCP does not expose `{tool_name}`.",
+            details={"availableTools": available_tools},
+        )
+
+    result = _http_json_request(
+        unity_mcp_url,
+        "tools/call",
+        {"name": request_name, "arguments": request_arguments},
+        timeout_ms,
+        2,
+    )
+    payload = _decode_mcp_tool_result(result)
+    if payload.get("success") is False:
+        raise ToolExecutionError(
+            f"Unity tool `{tool_name}` failed: {payload.get('error') or payload.get('message') or 'unknown error'}",
+            details={"unityResponse": payload, "invocationMode": invocation_mode},
+        )
+
+    return {
+        "tool": tool_name,
+        "invocationMode": invocation_mode,
+        "requestName": request_name,
+        "response": payload,
+    }
 
 
 def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
@@ -519,6 +728,105 @@ def doctor(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
+    args = _apply_connection_preset(args)
+
+    unity_project_path = _resolve_optional_path(args.get("unity_project_path"))
+    catalog_path = _resolve_catalog_path(args.get("catalog"), unity_project_path)
+    if catalog_path is None:
+        raise ToolExecutionError("`catalog` 또는 `unity_project_path`가 필요합니다.")
+
+    apply_in_unity = bool(args.get("apply_in_unity", True))
+    validate_before_apply = bool(args.get("validate_before_apply", True))
+    force_reindex = bool(args.get("force_reindex", False))
+
+    unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
+    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_TIMEOUT_MS)
+    available_tools: list[str] | None = None
+
+    if force_reindex or not catalog_path.exists() or apply_in_unity:
+        available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+
+    index_result: dict[str, Any] | None = None
+    if force_reindex or not catalog_path.exists():
+        if available_tools is None:
+            available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+        index_result = _call_unity_mcp_tool(
+            unity_mcp_url,
+            available_tools,
+            "index_project_resources",
+            {"outputPath": str(catalog_path)},
+            unity_mcp_timeout_ms,
+        )
+
+    workflow_args = dict(args)
+    workflow_args["catalog"] = str(catalog_path)
+    workflow_result = run_reference_to_resolved_blueprint(workflow_args)
+    workflow_payload = _extract_wrapped_payload(workflow_result)
+    if workflow_result.get("isError") or workflow_payload.get("hasErrors"):
+        raise ToolExecutionError(
+            "First-pass workflow failed before Unity apply.",
+            details={"workflow": workflow_payload or workflow_result},
+        )
+
+    resolved_blueprint = str(workflow_payload.get("resolvedBlueprint") or "")
+    handoff_bundle = str(workflow_payload.get("mcpHandoffBundle") or "")
+    if not resolved_blueprint:
+        raise ToolExecutionError(
+            "Workflow completed but did not return a resolved blueprint path.",
+            details={"workflow": workflow_payload},
+        )
+
+    handoff_payload: dict[str, Any] | None = None
+    if handoff_bundle:
+        handoff_path = Path(handoff_bundle)
+        if handoff_path.exists():
+            with handoff_path.open("r", encoding="utf-8") as handle:
+                handoff_payload = json.load(handle)
+
+    validate_result: dict[str, Any] | None = None
+    apply_result: dict[str, Any] | None = None
+    if apply_in_unity:
+        if available_tools is None:
+            available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+        if validate_before_apply:
+            validate_result = _call_unity_mcp_tool(
+                unity_mcp_url,
+                available_tools,
+                "apply_ui_blueprint",
+                {"action": "validate", "blueprintPath": resolved_blueprint},
+                unity_mcp_timeout_ms,
+            )
+        apply_result = _call_unity_mcp_tool(
+            unity_mcp_url,
+            available_tools,
+            "apply_ui_blueprint",
+            {"action": "apply", "blueprintPath": resolved_blueprint},
+            unity_mcp_timeout_ms,
+        )
+
+    next_actions: list[str] = []
+    verify_request = ((handoff_payload or {}).get("requests") or {}).get("verify")
+    if verify_request:
+        next_actions.append("적용 후 `manage_camera` screenshot 요청으로 첫 결과를 캡처합니다.")
+    next_actions.append("결과가 다르면 `unity_rag.run_verification_repair_loop`로 repair handoff를 생성합니다.")
+
+    payload = {
+        "unityProjectPath": str(unity_project_path) if unity_project_path else None,
+        "catalogPath": str(catalog_path),
+        "catalogIndexed": index_result is not None,
+        "unityMcpUrl": unity_mcp_url if (force_reindex or apply_in_unity or unity_project_path) else None,
+        "indexResult": index_result,
+        "workflow": workflow_payload,
+        "handoffBundle": handoff_payload,
+        "unityValidate": validate_result,
+        "unityApply": apply_result,
+        "verifyRequest": verify_request,
+        "nextActions": next_actions,
+    }
+    return _format_tool_result("run_first_pass_ui_build", payload)
+
+
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
     args = _apply_connection_preset(args)
     script_path = _script_path("workflows", "run_reference_to_resolved_blueprint.py")
@@ -610,6 +918,12 @@ TOOLS: list[ToolSpec] = [
         description="실제 workflow 실행 전 provider/auth 설정만 진단한다. 처음 연결할 때는 이 tool로 권장 preset, 해석된 provider, 토큰 소스, 누락된 설정, 다음 액션을 먼저 확인하는 것이 좋다.",
         input_schema=_build_inspect_provider_setup_schema(),
         handler=inspect_provider_setup,
+    ),
+    ToolSpec(
+        name="unity_rag.run_first_pass_ui_build",
+        description="첫 성공 경로를 한 번에 실행한다. catalog가 없으면 Unity에서 `index_project_resources`를 호출하고, sidecar workflow로 resolved blueprint를 만든 뒤, Unity의 `apply_ui_blueprint` validate/apply까지 이어서 실행한다.",
+        input_schema=_build_run_first_pass_ui_build_schema(),
+        handler=run_first_pass_ui_build,
     ),
     ToolSpec(
         name="unity_rag.extract_reference_layout",
