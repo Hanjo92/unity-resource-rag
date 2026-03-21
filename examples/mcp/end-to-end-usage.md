@@ -48,7 +48,28 @@
 
 응답에서 `missingSettings`가 비어 있고 `nextActions`가 실행 가능 상태를 안내하면 다음 단계로 넘어간다.
 
-## 4. Build The Catalog
+## 4. No-Reference Catalog Draft
+
+reference 이미지가 아직 없으면 catalog만으로 popup draft부터 띄울 수 있다.
+
+```json
+{
+  "tool": "unity_rag.run_catalog_draft_ui_build",
+  "arguments": {
+    "goal": "shop popup",
+    "screen_name": "ShopPopupDraft",
+    "title": "Night Shift Shop",
+    "body": "Catalog-first popup draft",
+    "primary_action_label": "BUY",
+    "secondary_action_label": "CLOSE",
+    "unity_project_path": "/absolute/path/to/unity-project"
+  }
+}
+```
+
+이 호출은 catalog에서 popup shell, panel sprite, icon, TMP font 후보를 찾아 draft blueprint를 만들고, 원하면 Unity `apply_ui_blueprint` validate/apply까지 이어서 수행한다.
+
+## 5. Build The Catalog
 
 Run the Unity-side export tool first so the sidecar has real project assets to bind against.
 
@@ -69,7 +90,7 @@ If the client handles tools better than resources, inspect the catalog through t
 }
 ```
 
-## 5. Extract And Bind
+## 6. Extract And Bind
 
 From a reference image:
 
@@ -91,7 +112,7 @@ Outputs:
 - `03-binding-report.json`
 - `04-mcp-handoff.json`
 
-## 6. Execute In Unity MCP
+## 7. Execute In Unity MCP
 
 Use the resolved blueprint with `apply_ui_blueprint`.
 
@@ -135,7 +156,7 @@ Then capture a screenshot:
 }
 ```
 
-## 7. Repair If Needed
+## 8. Repair If Needed
 
 Compare the screenshot against the reference image:
 

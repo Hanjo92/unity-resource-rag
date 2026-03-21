@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ else:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_ROOT = REPO_ROOT / "pipeline"
 DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
+DEFAULT_DRAFT_OUTPUT_RELATIVE_PATH = Path("Library/ResourceRag/Drafts")
 
 PROVIDER_DESCRIPTION = (
     "추출 provider 선택. "
@@ -381,6 +383,38 @@ def _build_run_first_pass_ui_build_schema() -> dict[str, Any]:
     }
 
 
+def _build_run_catalog_draft_ui_build_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "goal": {"type": "string", "description": "만들고 싶은 UI draft 설명. catalog search와 기본 본문 문구에 함께 사용한다."},
+            "screen_name": {"type": "string", "description": "출력 blueprint와 Canvas 이름에 사용할 screen name. 생략 시 CatalogDraft를 쓴다."},
+            "title": {"type": "string", "description": "헤더 텍스트. 생략 시 goal을 그대로 title에 쓴다."},
+            "subtitle": {"type": "string", "description": "선택적 서브타이틀."},
+            "body": {"type": "string", "description": "선택적 본문. 생략 시 goal을 그대로 body에 쓴다."},
+            "price_text": {"type": "string", "description": "선택적 가격/강조 텍스트."},
+            "primary_action_label": {"type": "string", "description": "선택적 1차 액션 라벨."},
+            "secondary_action_label": {"type": "string", "description": "선택적 2차 액션 라벨."},
+            "shell_query": {"type": "string", "description": "팝업 shell/prefab 후보를 찾을 때 쓸 질의문 override."},
+            "panel_query": {"type": "string", "description": "배경 panel sprite 후보를 찾을 때 쓸 질의문 override."},
+            "featured_asset_query": {"type": "string", "description": "대표 icon/sprite 후보를 찾을 때 쓸 질의문 override."},
+            "title_font_query": {"type": "string", "description": "title TMP font 후보를 찾을 때 쓸 질의문 override."},
+            "body_font_query": {"type": "string", "description": "body TMP font 후보를 찾을 때 쓸 질의문 override."},
+            "unity_project_path": {"type": "string", "description": "Unity project root. Used to infer the default catalog path and local draft output path."},
+            "catalog": {"type": "string", "description": "Path to resource_catalog.jsonl. If omitted and unity_project_path is set, defaults to Library/ResourceRag/resource_catalog.jsonl."},
+            "vector_index": {"type": "string", "description": "Optional resource_vector_index.json path for richer catalog search scoring."},
+            "output_dir": {"type": "string", "description": "Optional output directory for the generated draft blueprint and search report."},
+            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. Defaults to http://127.0.0.1:8080/mcp when Unity apply/index is enabled."},
+            "unity_mcp_timeout_ms": {"type": "integer", "minimum": 1, "description": "Unity MCP HTTP Local timeout in milliseconds."},
+            "force_reindex": {"type": "boolean", "description": "Force re-running index_project_resources before generating the draft."},
+            "apply_in_unity": {"type": "boolean", "description": "When true, validate/apply the generated blueprint in Unity MCP.", "default": True},
+            "validate_before_apply": {"type": "boolean", "description": "When true, call apply_ui_blueprint validate before apply.", "default": True},
+        },
+        "required": ["goal"],
+        "additionalProperties": False,
+    }
+
+
 def _format_tool_result(title: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = {
         "title": title,
@@ -467,6 +501,475 @@ def _resolve_catalog_path(raw_catalog: Any, unity_project_path: Path | None) -> 
     if unity_project_path is None:
         return None
     return (unity_project_path / DEFAULT_CATALOG_RELATIVE_PATH).resolve()
+
+
+def _resolve_path_against_project(raw_path: Any, unity_project_path: Path | None) -> Path | None:
+    if raw_path in (None, ""):
+        return None
+    path = Path(str(raw_path)).expanduser()
+    if unity_project_path is not None and not path.is_absolute():
+        return (unity_project_path / path).resolve()
+    return path.resolve()
+
+
+def _slugify(value: str) -> str:
+    collapsed = re.sub(r"[^A-Za-z0-9]+", "-", value.strip().lower()).strip("-")
+    return collapsed or "catalog-draft"
+
+
+def _default_catalog_draft_output_dir(screen_name: str, unity_project_path: Path | None, catalog_path: Path) -> Path:
+    slug = _slugify(screen_name)
+    if unity_project_path is not None:
+        return (unity_project_path / DEFAULT_DRAFT_OUTPUT_RELATIVE_PATH / slug).resolve()
+    return (catalog_path.parent / "drafts" / slug).resolve()
+
+
+def _load_jsonl_records(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for index, line in enumerate(handle, start=1):
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise ToolExecutionError(
+                    f"Failed to parse catalog JSONL at line {index}.",
+                    details={"catalogPath": str(path), "lineNumber": index},
+                ) from exc
+            if isinstance(parsed, dict):
+                records.append(parsed)
+    return records
+
+
+def _save_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")
+
+
+def _search_catalog_records(
+    catalog_path: Path,
+    query_text: str,
+    *,
+    preferred_kind: str | None = None,
+    region_type: str | None = None,
+    aspect_ratio: float | None = None,
+    vector_index_path: Path | None = None,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    args = [
+        str(catalog_path),
+        "--query",
+        query_text,
+        "--top-k",
+        str(max(1, top_k)),
+    ]
+    if region_type:
+        args.extend(["--region-type", region_type])
+    if preferred_kind:
+        args.extend(["--preferred-kind", preferred_kind])
+    if aspect_ratio is not None:
+        args.extend(["--aspect-ratio", str(aspect_ratio)])
+    if vector_index_path is not None:
+        args.extend(["--vector-index", str(vector_index_path)])
+    return _run_script(_script_path("retrieval", "search_catalog.py"), args)
+
+
+def _candidate_from_record(record: dict[str, Any], *, reason: str) -> dict[str, Any]:
+    return {
+        "id": record.get("id"),
+        "guid": record.get("guid"),
+        "localFileId": record.get("localFileId"),
+        "subAssetName": record.get("subAssetName"),
+        "score": 0.0,
+        "path": record.get("path"),
+        "name": record.get("name"),
+        "assetType": record.get("assetType"),
+        "binding": record.get("binding", {}),
+        "semanticText": record.get("semanticText"),
+        "scoreBreakdown": {},
+        "reasons": [reason],
+    }
+
+
+def _candidate_score(candidate: dict[str, Any] | None) -> float:
+    if not isinstance(candidate, dict):
+        return 0.0
+    try:
+        return float(candidate.get("score") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _candidate_asset_type(record: dict[str, Any] | None, candidate: dict[str, Any] | None) -> str:
+    asset_type = ""
+    if isinstance(record, dict):
+        asset_type = str(record.get("assetType") or "")
+    if not asset_type and isinstance(candidate, dict):
+        asset_type = str(candidate.get("assetType") or "")
+    return asset_type.lower()
+
+
+def _candidate_binding_kind(record: dict[str, Any] | None, candidate: dict[str, Any] | None) -> str:
+    binding_kind = ""
+    if isinstance(record, dict):
+        binding_kind = str(((record.get("binding") or {}).get("kind")) or "")
+    if not binding_kind and isinstance(candidate, dict):
+        binding_kind = str(((candidate.get("binding") or {}).get("kind")) or "")
+    return binding_kind.lower()
+
+
+def _candidate_semantic_blob(record: dict[str, Any] | None, candidate: dict[str, Any] | None) -> str:
+    parts: list[str] = []
+    for source in (record, candidate):
+        if not isinstance(source, dict):
+            continue
+        for key in ("semanticText", "name", "path", "subAssetName"):
+            value = source.get(key)
+            if value:
+                parts.append(str(value))
+        binding = source.get("binding") or {}
+        if isinstance(binding, dict):
+            for key in ("kind", "unityLoadPath", "subAssetName"):
+                value = binding.get(key)
+                if value:
+                    parts.append(str(value))
+    return " ".join(parts).lower()
+
+
+def _select_catalog_candidate(
+    search_payload: dict[str, Any],
+    records_by_id: dict[str, dict[str, Any]],
+    *,
+    asset_types: tuple[str, ...] = (),
+    binding_kinds: tuple[str, ...] = (),
+    semantic_terms: tuple[str, ...] = (),
+    min_score: float | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    results = search_payload.get("results") or []
+    for candidate in results:
+        if not isinstance(candidate, dict):
+            continue
+        record = records_by_id.get(str(candidate.get("id")))
+        asset_type = _candidate_asset_type(record, candidate)
+        binding_kind = _candidate_binding_kind(record, candidate)
+        if asset_types and asset_type not in {value.lower() for value in asset_types}:
+            continue
+        if binding_kinds and binding_kind not in {value.lower() for value in binding_kinds}:
+            continue
+        semantic_blob = _candidate_semantic_blob(record, candidate)
+        if semantic_terms and any(term.lower() in semantic_blob for term in semantic_terms):
+            return candidate, record
+        if min_score is not None and _candidate_score(candidate) >= min_score:
+            return candidate, record
+        if not semantic_terms and min_score is None:
+            return candidate, record
+    return None, None
+
+
+def _fallback_catalog_record(
+    records: list[dict[str, Any]],
+    *,
+    asset_types: tuple[str, ...] = (),
+    binding_kinds: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    normalized_asset_types = {value.lower() for value in asset_types}
+    normalized_binding_kinds = {value.lower() for value in binding_kinds}
+    for record in records:
+        asset_type = _candidate_asset_type(record, None)
+        binding_kind = _candidate_binding_kind(record, None)
+        if normalized_asset_types and asset_type not in normalized_asset_types:
+            continue
+        if normalized_binding_kinds and binding_kind not in normalized_binding_kinds:
+            continue
+        return record
+    return None
+
+
+def _asset_reference_from_candidate(
+    candidate: dict[str, Any] | None,
+    record: dict[str, Any] | None,
+    *,
+    forced_kind: str | None = None,
+) -> dict[str, Any] | None:
+    if not isinstance(candidate, dict) and not isinstance(record, dict):
+        return None
+
+    reference = {
+        "kind": forced_kind or _candidate_binding_kind(record, candidate),
+        "path": (candidate or {}).get("path") or (record or {}).get("path"),
+        "guid": (candidate or {}).get("guid") or (record or {}).get("guid"),
+        "localFileId": (candidate or {}).get("localFileId") or (record or {}).get("localFileId"),
+        "subAssetName": (candidate or {}).get("subAssetName") or (record or {}).get("subAssetName"),
+    }
+    filtered = {
+        key: value
+        for key, value in reference.items()
+        if value not in (None, "", 0)
+    }
+    return filtered or None
+
+
+def _full_stretch_rect() -> dict[str, Any]:
+    return {
+        "anchorMin": {"x": 0, "y": 0},
+        "anchorMax": {"x": 1, "y": 1},
+        "offsetMin": {"x": 0, "y": 0},
+        "offsetMax": {"x": 0, "y": 0},
+    }
+
+
+def _center_rect(width: float, height: float, *, x: float = 0, y: float = 0) -> dict[str, Any]:
+    return {
+        "anchorMin": {"x": 0.5, "y": 0.5},
+        "anchorMax": {"x": 0.5, "y": 0.5},
+        "pivot": {"x": 0.5, "y": 0.5},
+        "anchoredPosition": {"x": x, "y": y},
+        "sizeDelta": {"x": width, "y": height},
+    }
+
+
+def _make_tmp_text_node(
+    *,
+    node_id: str,
+    name: str,
+    value: str,
+    width: float,
+    height: float,
+    y: float,
+    font_size: int,
+    color: str,
+    font_asset: dict[str, Any] | None,
+) -> dict[str, Any]:
+    text_spec: dict[str, Any] = {
+        "value": value,
+        "fontSize": font_size,
+        "alignment": "Center",
+        "enableAutoSizing": False,
+        "raycastTarget": False,
+        "color": color,
+    }
+    if font_asset:
+        text_spec["fontAsset"] = font_asset
+    return {
+        "id": node_id,
+        "name": name,
+        "kind": "tmp_text",
+        "text": text_spec,
+        "rect": _center_rect(width, height, y=y),
+    }
+
+
+def _build_catalog_draft_blueprint(
+    *,
+    screen_name: str,
+    title: str,
+    subtitle: str | None,
+    body: str,
+    price_text: str | None,
+    primary_action_label: str | None,
+    secondary_action_label: str | None,
+    shell_prefab_asset: dict[str, Any] | None,
+    panel_sprite_asset: dict[str, Any] | None,
+    panel_is_nine_slice: bool,
+    featured_sprite_asset: dict[str, Any] | None,
+    title_font_asset: dict[str, Any] | None,
+    body_font_asset: dict[str, Any] | None,
+) -> tuple[dict[str, Any], str]:
+    overlay_children: list[dict[str, Any]] = [
+        _make_tmp_text_node(
+            node_id="draft_title",
+            name="DraftTitle",
+            value=title,
+            width=620,
+            height=60,
+            y=248,
+            font_size=42,
+            color="#F7E9AEFF",
+            font_asset=title_font_asset,
+        )
+    ]
+
+    if subtitle:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_subtitle",
+                name="DraftSubtitle",
+                value=subtitle,
+                width=700,
+                height=34,
+                y=206,
+                font_size=20,
+                color="#C9D3DAFF",
+                font_asset=body_font_asset,
+            )
+        )
+
+    body_y = -24
+    if featured_sprite_asset:
+        overlay_children.append(
+            {
+                "id": "draft_featured_icon",
+                "name": "DraftFeaturedIcon",
+                "kind": "image",
+                "asset": featured_sprite_asset,
+                "image": {
+                    "type": "Simple",
+                    "preserveAspect": True,
+                    "raycastTarget": False,
+                    "color": "#FFFFFFFF",
+                },
+                "rect": _center_rect(148, 148, y=88),
+            }
+        )
+        body_y = -102
+
+    overlay_children.append(
+        _make_tmp_text_node(
+            node_id="draft_body",
+            name="DraftBody",
+            value=body,
+            width=680,
+            height=96,
+            y=body_y,
+            font_size=22,
+            color="#DCE4EAFF",
+            font_asset=body_font_asset,
+        )
+    )
+
+    footer_y = -224 if featured_sprite_asset else -188
+    if price_text:
+        overlay_children.extend(
+            [
+                _make_tmp_text_node(
+                    node_id="draft_price_caption",
+                    name="DraftPriceCaption",
+                    value="PRICE",
+                    width=160,
+                    height=28,
+                    y=footer_y,
+                    font_size=18,
+                    color="#9FB2C1FF",
+                    font_asset=body_font_asset,
+                ),
+                _make_tmp_text_node(
+                    node_id="draft_price_value",
+                    name="DraftPriceValue",
+                    value=price_text,
+                    width=320,
+                    height=40,
+                    y=footer_y - 34,
+                    font_size=28,
+                    color="#8CE0A7FF",
+                    font_asset=title_font_asset or body_font_asset,
+                ),
+            ]
+        )
+
+    button_y = -320 if featured_sprite_asset else -286
+    if primary_action_label:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_primary_action",
+                name="DraftPrimaryActionLabel",
+                value=primary_action_label,
+                width=220,
+                height=36,
+                y=button_y,
+                font_size=24,
+                color="#FFFFFFFF",
+                font_asset=title_font_asset or body_font_asset,
+            )
+        )
+        overlay_children[-1]["rect"]["anchoredPosition"]["x"] = -110
+    if secondary_action_label:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_secondary_action",
+                name="DraftSecondaryActionLabel",
+                value=secondary_action_label,
+                width=220,
+                height=36,
+                y=button_y,
+                font_size=24,
+                color="#FFFFFFFF",
+                font_asset=title_font_asset or body_font_asset,
+            )
+        )
+        overlay_children[-1]["rect"]["anchoredPosition"]["x"] = 110
+
+    overlay_root = {
+        "id": "draft_overlay_root",
+        "name": "DraftOverlayRoot",
+        "kind": "container",
+        "rect": _full_stretch_rect(),
+        "children": overlay_children,
+    }
+
+    draft_mode = "bare_container"
+    if shell_prefab_asset:
+        draft_mode = "shell_prefab"
+        shell_node: dict[str, Any] = {
+            "id": "draft_shell_prefab",
+            "name": "DraftShellPrefab",
+            "kind": "prefab_instance",
+            "asset": shell_prefab_asset,
+            "children": [overlay_root],
+        }
+    elif panel_sprite_asset:
+        draft_mode = "panel_sprite"
+        shell_node = {
+            "id": "draft_panel_sprite",
+            "name": "DraftPanelSprite",
+            "kind": "image",
+            "asset": panel_sprite_asset,
+            "image": {
+                "type": "Sliced" if panel_is_nine_slice else "Simple",
+                "preserveAspect": False,
+                "raycastTarget": False,
+                "color": "#FFFFFFFF",
+            },
+            "rect": _center_rect(920, 640),
+            "children": [overlay_root],
+        }
+    else:
+        shell_node = {
+            "id": "draft_panel_container",
+            "name": "DraftPanelContainer",
+            "kind": "container",
+            "rect": _center_rect(920, 640),
+            "children": [overlay_root],
+        }
+
+    blueprint = {
+        "screenName": screen_name,
+        "stack": "ugui",
+        "root": {
+            "id": "root_canvas",
+            "name": f"{screen_name}Canvas",
+            "kind": "canvas",
+            "canvasScaler": {
+                "uiScaleMode": "ScaleWithScreenSize",
+                "referenceResolution": {"x": 1920, "y": 1080},
+                "screenMatchMode": "MatchWidthOrHeight",
+                "matchWidthOrHeight": 0.5,
+            },
+            "children": [
+                {
+                    "id": "safe_area_root",
+                    "name": "SafeAreaRoot",
+                    "kind": "container",
+                    "rect": _full_stretch_rect(),
+                    "children": [shell_node],
+                }
+            ],
+        },
+    }
+    return blueprint, draft_mode
 
 
 def _http_json_request(url: str, method: str, params: dict[str, Any] | None, timeout_ms: int, request_id: int) -> dict[str, Any]:
@@ -827,6 +1330,270 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     return _format_tool_result("run_first_pass_ui_build", payload)
 
 
+def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
+    goal = str(args.get("goal") or "").strip()
+    if not goal:
+        raise ToolExecutionError("`goal` is required.")
+
+    screen_name = str(args.get("screen_name") or "CatalogDraft").strip() or "CatalogDraft"
+    title = str(args.get("title") or goal).strip() or screen_name
+    body = str(args.get("body") or goal).strip() or goal
+    subtitle = str(args.get("subtitle") or "").strip() or None
+    price_text = str(args.get("price_text") or "").strip() or None
+    primary_action_label = str(args.get("primary_action_label") or "").strip() or None
+    secondary_action_label = str(args.get("secondary_action_label") or "").strip() or None
+
+    unity_project_path = _resolve_optional_path(args.get("unity_project_path"))
+    catalog_path = _resolve_catalog_path(args.get("catalog"), unity_project_path)
+    if catalog_path is None:
+        raise ToolExecutionError("`catalog` 또는 `unity_project_path`가 필요합니다.")
+
+    vector_index_path = _resolve_path_against_project(args.get("vector_index"), unity_project_path)
+    output_dir = _resolve_path_against_project(args.get("output_dir"), unity_project_path)
+    if output_dir is None:
+        output_dir = _default_catalog_draft_output_dir(screen_name, unity_project_path, catalog_path)
+
+    apply_in_unity = bool(args.get("apply_in_unity", True))
+    validate_before_apply = bool(args.get("validate_before_apply", True))
+    force_reindex = bool(args.get("force_reindex", False))
+
+    unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
+    unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_TIMEOUT_MS)
+    available_tools: list[str] | None = None
+
+    if force_reindex or not catalog_path.exists() or apply_in_unity:
+        available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+
+    index_result: dict[str, Any] | None = None
+    if force_reindex or not catalog_path.exists():
+        if available_tools is None:
+            available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+        index_result = _call_unity_mcp_tool(
+            unity_mcp_url,
+            available_tools,
+            "index_project_resources",
+            {"outputPath": str(catalog_path)},
+            unity_mcp_timeout_ms,
+        )
+
+    if not catalog_path.exists():
+        raise ToolExecutionError(
+            "Catalog draft build requires an existing resource catalog after indexing.",
+            details={"catalogPath": str(catalog_path)},
+        )
+
+    records = _load_jsonl_records(catalog_path)
+    records_by_id = {
+        str(record.get("id")): record
+        for record in records
+        if isinstance(record, dict) and record.get("id")
+    }
+
+    shell_search = _search_catalog_records(
+        catalog_path,
+        str(args.get("shell_query") or f"{goal} popup modal dialog window shell"),
+        preferred_kind="prefab",
+        region_type="popup_frame",
+        vector_index_path=vector_index_path,
+        top_k=5,
+    )
+    panel_search = _search_catalog_records(
+        catalog_path,
+        str(args.get("panel_query") or f"{goal} popup panel frame background"),
+        preferred_kind="sprite",
+        region_type="popup_frame",
+        aspect_ratio=920.0 / 640.0,
+        vector_index_path=vector_index_path,
+        top_k=5,
+    )
+    icon_search = _search_catalog_records(
+        catalog_path,
+        str(args.get("featured_asset_query") or f"{goal} reward item icon"),
+        preferred_kind="sprite",
+        region_type="icon",
+        aspect_ratio=1.0,
+        vector_index_path=vector_index_path,
+        top_k=5,
+    )
+    title_font_search = _search_catalog_records(
+        catalog_path,
+        str(args.get("title_font_query") or f"{goal} ui title heading font"),
+        preferred_kind="tmp_font",
+        vector_index_path=vector_index_path,
+        top_k=5,
+    )
+    body_font_search = _search_catalog_records(
+        catalog_path,
+        str(args.get("body_font_query") or f"{goal} readable ui body font"),
+        preferred_kind="tmp_font",
+        vector_index_path=vector_index_path,
+        top_k=5,
+    )
+
+    shell_candidate, shell_record = _select_catalog_candidate(
+        shell_search,
+        records_by_id,
+        asset_types=("prefab",),
+        binding_kinds=("prefab",),
+        semantic_terms=("popup", "panel", "dialog", "window", "modal"),
+        min_score=0.34,
+    )
+    panel_candidate, panel_record = _select_catalog_candidate(
+        panel_search,
+        records_by_id,
+        asset_types=("sprite", "texture2d"),
+        binding_kinds=("sprite",),
+        semantic_terms=("popup", "panel", "frame", "window", "modal"),
+        min_score=0.34,
+    )
+    icon_candidate, icon_record = _select_catalog_candidate(
+        icon_search,
+        records_by_id,
+        asset_types=("sprite", "texture2d"),
+        binding_kinds=("sprite",),
+        semantic_terms=("icon", "reward", "badge", "item"),
+        min_score=0.30,
+    )
+
+    title_font_candidate, title_font_record = _select_catalog_candidate(
+        title_font_search,
+        records_by_id,
+        asset_types=("tmp_fontasset",),
+        binding_kinds=("tmp_font",),
+    )
+    if title_font_candidate is None:
+        title_font_record = _fallback_catalog_record(records, asset_types=("tmp_fontasset",), binding_kinds=("tmp_font",))
+        if title_font_record is not None:
+            title_font_candidate = _candidate_from_record(title_font_record, reason="font-fallback")
+
+    body_font_candidate, body_font_record = _select_catalog_candidate(
+        body_font_search,
+        records_by_id,
+        asset_types=("tmp_fontasset",),
+        binding_kinds=("tmp_font",),
+    )
+    if body_font_candidate is None:
+        body_font_record = title_font_record or _fallback_catalog_record(records, asset_types=("tmp_fontasset",), binding_kinds=("tmp_font",))
+        if body_font_record is not None:
+            body_font_candidate = _candidate_from_record(body_font_record, reason="font-fallback")
+
+    shell_prefab_asset = _asset_reference_from_candidate(shell_candidate, shell_record, forced_kind="prefab")
+    panel_sprite_asset = _asset_reference_from_candidate(panel_candidate, panel_record, forced_kind="sprite")
+    featured_sprite_asset = _asset_reference_from_candidate(icon_candidate, icon_record, forced_kind="sprite")
+    title_font_asset = _asset_reference_from_candidate(title_font_candidate, title_font_record, forced_kind="tmp_font")
+    body_font_asset = _asset_reference_from_candidate(body_font_candidate, body_font_record, forced_kind="tmp_font")
+
+    panel_is_nine_slice = bool(((panel_record or {}).get("uiHints") or {}).get("isNineSliceCandidate"))
+
+    blueprint, draft_mode = _build_catalog_draft_blueprint(
+        screen_name=screen_name,
+        title=title,
+        subtitle=subtitle,
+        body=body,
+        price_text=price_text,
+        primary_action_label=primary_action_label,
+        secondary_action_label=secondary_action_label,
+        shell_prefab_asset=shell_prefab_asset,
+        panel_sprite_asset=panel_sprite_asset,
+        panel_is_nine_slice=panel_is_nine_slice,
+        featured_sprite_asset=featured_sprite_asset,
+        title_font_asset=title_font_asset,
+        body_font_asset=body_font_asset,
+    )
+
+    blueprint_path = output_dir / "01-catalog-draft-blueprint.json"
+    search_report_path = output_dir / "00-catalog-draft-searches.json"
+    _save_json(blueprint_path, blueprint)
+    _save_json(
+        search_report_path,
+        {
+            "screenName": screen_name,
+            "goal": goal,
+            "catalogPath": str(catalog_path),
+            "vectorIndex": str(vector_index_path) if vector_index_path else None,
+            "selectedAssets": {
+                "shellPrefab": shell_candidate,
+                "panelSprite": panel_candidate,
+                "featuredSprite": icon_candidate,
+                "titleFont": title_font_candidate,
+                "bodyFont": body_font_candidate,
+            },
+            "queries": {
+                "shellPrefab": shell_search,
+                "panelSprite": panel_search,
+                "featuredSprite": icon_search,
+                "titleFont": title_font_search,
+                "bodyFont": body_font_search,
+            },
+        },
+    )
+
+    handoff_result = build_mcp_handoff_bundle({"resolved_blueprint": str(blueprint_path)})
+    handoff_payload = _extract_wrapped_payload(handoff_result)
+    handoff_bundle_path = Path(str(handoff_payload.get("output") or "")).expanduser().resolve() if handoff_payload.get("output") else None
+    handoff_bundle: dict[str, Any] | None = None
+    if handoff_bundle_path and handoff_bundle_path.exists():
+        with handoff_bundle_path.open("r", encoding="utf-8") as handle:
+            handoff_bundle = json.load(handle)
+
+    validate_result: dict[str, Any] | None = None
+    apply_result: dict[str, Any] | None = None
+    if apply_in_unity:
+        if available_tools is None:
+            available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
+        if validate_before_apply:
+            validate_result = _call_unity_mcp_tool(
+                unity_mcp_url,
+                available_tools,
+                "apply_ui_blueprint",
+                {"action": "validate", "blueprintPath": str(blueprint_path)},
+                unity_mcp_timeout_ms,
+            )
+        apply_result = _call_unity_mcp_tool(
+            unity_mcp_url,
+            available_tools,
+            "apply_ui_blueprint",
+            {"action": "apply", "blueprintPath": str(blueprint_path)},
+            unity_mcp_timeout_ms,
+        )
+
+    verify_request = ((handoff_bundle or {}).get("requests") or {}).get("verify")
+    next_actions = [
+        "draft가 뜨면 제목/본문/가격 문구와 spacing을 먼저 조정합니다.",
+        "결과가 다르면 `manage_camera` screenshot으로 캡처한 뒤 `unity_rag.run_verification_repair_loop`로 repair handoff를 만듭니다.",
+    ]
+    if draft_mode == "bare_container":
+        next_actions.insert(0, "popup shell 후보를 못 찾아 bare container로 생성했습니다. `shell_query`를 더 구체적으로 주거나 대표 popup prefab 경로를 확인해 보세요.")
+    elif draft_mode == "panel_sprite":
+        next_actions.insert(0, "prefab shell 대신 panel sprite 기반 draft를 만들었습니다. 버튼/닫기 affordance는 수동 보강이 필요할 수 있습니다.")
+
+    payload = {
+        "unityProjectPath": str(unity_project_path) if unity_project_path else None,
+        "catalogPath": str(catalog_path),
+        "catalogIndexed": index_result is not None,
+        "outputDir": str(output_dir),
+        "draftMode": draft_mode,
+        "draftBlueprint": str(blueprint_path),
+        "searchReport": str(search_report_path),
+        "handoffBundlePath": str(handoff_bundle_path) if handoff_bundle_path else None,
+        "handoffBundle": handoff_bundle,
+        "selectedAssets": {
+            "shellPrefab": shell_candidate,
+            "panelSprite": panel_candidate,
+            "featuredSprite": icon_candidate,
+            "titleFont": title_font_candidate,
+            "bodyFont": body_font_candidate,
+        },
+        "unityMcpUrl": unity_mcp_url if (force_reindex or apply_in_unity or unity_project_path) else None,
+        "indexResult": index_result,
+        "unityValidate": validate_result,
+        "unityApply": apply_result,
+        "verifyRequest": verify_request,
+        "nextActions": next_actions,
+    }
+    return _format_tool_result("run_catalog_draft_ui_build", payload)
+
+
 def run_reference_to_resolved_blueprint(args: dict[str, Any]) -> dict[str, Any]:
     args = _apply_connection_preset(args)
     script_path = _script_path("workflows", "run_reference_to_resolved_blueprint.py")
@@ -924,6 +1691,12 @@ TOOLS: list[ToolSpec] = [
         description="첫 성공 경로를 한 번에 실행한다. catalog가 없으면 Unity에서 `index_project_resources`를 호출하고, sidecar workflow로 resolved blueprint를 만든 뒤, Unity의 `apply_ui_blueprint` validate/apply까지 이어서 실행한다.",
         input_schema=_build_run_first_pass_ui_build_schema(),
         handler=run_first_pass_ui_build,
+    ),
+    ToolSpec(
+        name="unity_rag.run_catalog_draft_ui_build",
+        description="reference 이미지가 없어도 catalog만으로 첫 UI draft를 만든다. popup shell/panel/icon/font를 검색해 draft blueprint를 만들고, 원하면 Unity의 `apply_ui_blueprint` validate/apply까지 이어서 실행한다.",
+        input_schema=_build_run_catalog_draft_ui_build_schema(),
+        handler=run_catalog_draft_ui_build,
     ),
     ToolSpec(
         name="unity_rag.extract_reference_layout",
