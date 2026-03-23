@@ -22,12 +22,12 @@ namespace UnityResourceRag.Editor
             settings.EnsureDefaults();
             string configPath = settings.CodexConfigPath;
 
-            if (!UnityResourceRagEditorSettings.IsSidecarRepoRoot(settings.SidecarRepoRoot))
+            if (!UnityResourceRagEditorSettings.IsSidecarRuntimeRoot(settings.SidecarRepoRoot))
             {
                 return new UnityResourceRagCodexConfigResult
                 {
                     Skipped = true,
-                    Summary = "Skipped Codex config sync because the sidecar repo root could not be found.",
+                    Summary = "Skipped Codex config sync because the sidecar runtime root could not be found.",
                     ConfigPath = configPath,
                 };
             }

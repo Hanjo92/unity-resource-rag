@@ -266,23 +266,24 @@ namespace UnityResourceRag.Editor
 
         private static UnityResourceRagReadinessItem BuildRepoItem(UnityResourceRagEditorSettings settings)
         {
-            if (UnityResourceRagEditorSettings.IsSidecarRepoRoot(settings.SidecarRepoRoot))
+            if (UnityResourceRagEditorSettings.IsSidecarRuntimeRoot(settings.SidecarRepoRoot))
             {
+                string runtimeKind = UnityResourceRagEditorSettings.DescribeSidecarRuntimeRoot(settings.SidecarRepoRoot);
                 return new UnityResourceRagReadinessItem
                 {
-                    Title = "Sidecar Repo",
+                    Title = "Sidecar Runtime",
                     Level = UnityResourceRagReadinessLevel.Ready,
-                    Summary = "Found a full unity-resource-rag checkout for the one-click workflow.",
+                    Summary = $"Found a {runtimeKind} for the one-click workflow.",
                     NextStep = settings.SidecarRepoRoot,
                 };
             }
 
             return new UnityResourceRagReadinessItem
             {
-                Title = "Sidecar Repo",
+                Title = "Sidecar Runtime",
                 Level = UnityResourceRagReadinessLevel.Blocked,
                 Summary = "The current path is not enough to run the Python sidecar.",
-                NextStep = "Set Sidecar Repo Root to a full unity-resource-rag checkout path.",
+                NextStep = "Set Sidecar Runtime Root to a portable sidecar bundle or a full unity-resource-rag checkout.",
             };
         }
 
@@ -296,7 +297,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Python Runtime",
                     Level = UnityResourceRagReadinessLevel.Ready,
-                    Summary = "The repo-local Python runtime is ready.",
+                    Summary = "The sidecar-local Python runtime is ready.",
                     NextStep = repoVenvPython,
                 };
             }
@@ -307,7 +308,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Python Runtime",
                     Level = UnityResourceRagReadinessLevel.Attention,
-                    Summary = "A working Python executable was found, but the repo-local runtime is not pinned yet.",
+                    Summary = "A working Python executable was found, but the sidecar-local runtime is not pinned yet.",
                     NextStep = $"Run Bootstrap Python Runtime or continue with `{detectedPython}` as-is.",
                 };
             }
@@ -567,7 +568,7 @@ namespace UnityResourceRag.Editor
                 {
                     builder.AppendLine($"Missing Python module: {missingModule}");
                     builder.AppendLine("Try this next:");
-                    builder.AppendLine("- Run Bootstrap Python Runtime first to prepare the repo-local `.venv`.");
+                    builder.AppendLine("- Run Bootstrap Python Runtime first to prepare the sidecar-local `.venv`.");
                     builder.AppendLine("- If the problem continues, set Python Executable to an interpreter that already has the requirements installed.");
                 }
             }

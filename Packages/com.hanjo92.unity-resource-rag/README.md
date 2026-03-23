@@ -22,10 +22,10 @@
 빠른 시작:
 
 1. 이 패키지를 Unity 프로젝트의 `Packages/` 아래에 두거나 git path로 설치한다.
-2. 가능하면 local checkout의 `file:` 경로로 연결한다. `Window > Unity Resource RAG`의 one-click build는 루트 `pipeline/` sidecar에 접근해야 한다.
+2. 개발자는 local checkout의 `file:` 경로를, non-dev 사용자는 portable sidecar bundle 경로를 sidecar runtime root로 연결한다. `Window > Unity Resource RAG`의 one-click build는 루트 `pipeline/` sidecar에 접근해야 한다.
 3. `unity-mcp`가 설치된 프로젝트에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 누른다.
 4. Quick Setup 안의 sign-in method는 기본적으로 `Use my Codex sign-in (Recommended)`로 두는 것을 권장한다. API key 자체를 Unity에 붙여넣는 대신, 이미 로그인된 Codex 세션이나 기존 environment variable을 재사용하는 흐름이다.
-5. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 repo-local `.venv`를 준비한다.
+5. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 sidecar-local `.venv`를 준비한다.
 6. 같은 창에서 reference 이미지를 넣거나, `Draft Template`을 `Popup / HUD / List` 중 하나로 고른 뒤 goal/title/body를 채우고 `Start UI Build`를 누른다.
 7. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Last Run Artifacts`, `Export Case Report`까지 이어서 진행할 수 있다.
 8. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
@@ -41,10 +41,10 @@
 
 `Readiness Dashboard`가 하는 일:
 
-- `repo / python / AI access / Unity Editor connection / build input` 상태를 `Ready / Attention / Blocked`로 요약
+- `sidecar / python / AI access / Unity Editor connection / build input` 상태를 `Ready / Attention / Blocked`로 요약
 - raw MCP jargon 대신 다음 액션 중심 문장으로 현재 막힌 지점을 설명
 - `Refresh Readiness`로 현재 상태를 다시 확인
-- `Bootstrap Python Runtime`으로 repo-local `.venv` 생성과 requirements 설치 시도
+- `Bootstrap Python Runtime`으로 sidecar-local `.venv` 생성과 requirements 설치 시도
 
 `Sign-in Method`가 의미하는 것:
 
@@ -69,3 +69,11 @@
 구현 메모는 `Documentation~/resource-indexing-mvp.md`를 참고하면 된다.
 
 MCP sidecar contract는 [mcp-sidecar-contract.md](../../specs/mcp-sidecar-contract.md)와 [examples/mcp/end-to-end-usage.md](../../examples/mcp/end-to-end-usage.md)를 보면 된다.
+
+portable sidecar bundle 전략과 build script는 [packaged-sidecar-distribution-strategy.md](../../docs/decisions/packaged-sidecar-distribution-strategy.md)에서 확인할 수 있다.
+
+bundle을 직접 만들 때는 저장소 루트에서 아래 명령을 사용한다.
+
+```bash
+python3 scripts/build_sidecar_bundle.py --output-dir dist
+```

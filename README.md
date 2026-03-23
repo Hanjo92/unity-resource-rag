@@ -61,9 +61,9 @@ pip install -r requirements.txt
 
 1. Unity 프로젝트에 `unity-mcp`를 설치한다.
 2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag)를 `Packages/` 아래에 두거나 Git URL로 설치한다.
-3. 가능하면 이 저장소 전체를 local checkout으로 두고 package를 `file:` 경로로 연결한다. `Window > Unity Resource RAG`의 one-click build는 패키지 내부 코드뿐 아니라 루트 `pipeline/` sidecar도 필요하다.
+3. non-dev 사용자는 portable sidecar bundle을, 개발자는 이 저장소 전체 local checkout을 sidecar runtime root로 사용할 수 있다. `Window > Unity Resource RAG`의 one-click build는 패키지 내부 코드뿐 아니라 루트 `pipeline/` sidecar도 필요하다.
 4. Unity에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 한 번 실행한다. 이 버튼은 Unity MCP를 HTTP Local로 맞추고, `Project Scoped Tools`를 끄고, custom tool/resource 노출과 Codex config 동기화를 함께 시도한다.
-5. Readiness Dashboard에서 `repo / python / AI access / Unity Editor connection / build input` 상태를 확인한다. Python이 막혀 있으면 같은 창에서 `Bootstrap Python Runtime`으로 repo-local `.venv`와 requirements를 준비할 수 있다.
+5. Readiness Dashboard에서 `sidecar / python / AI access / Unity Editor connection / build input` 상태를 확인한다. Python이 막혀 있으면 같은 창에서 `Bootstrap Python Runtime`으로 sidecar-local `.venv`와 requirements를 준비할 수 있다.
 6. Unity에서 discovery와 resource registration이 완료되면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 사용할 수 있다.
 7. sidecar와 gateway를 같이 띄울 때는 `unity-mcp`의 기본 `127.0.0.1:8080/mcp`와 겹치지 않도록 gateway 기본 URL `http://127.0.0.1:8090`을 사용한다.
 
@@ -105,6 +105,16 @@ python3 -m pipeline.mcp
 python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 ```
 
+### 4) Portable sidecar bundle 만들기
+
+non-dev 배포용 sidecar artifact를 만들려면 아래 스크립트를 사용한다.
+
+```bash
+python3 scripts/build_sidecar_bundle.py --output-dir dist
+```
+
+이 명령은 `dist/unity-resource-rag-sidecar-<version>/` 아래에 portable sidecar bundle을 만들고, Unity 창의 `Sidecar Runtime Root`에서 바로 가리킬 수 있는 형태로 정리한다.
+
 ## 빠른 시작
 
 ### 기본 흐름
@@ -120,7 +130,9 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 9. `Last Run Artifacts`에서 blueprint, search report, handoff, screenshot, repair output을 `Open / Reveal / Copy`로 바로 다시 연다.
 10. 검토 케이스를 남기고 싶으면 `Export Case Report`로 md/json 리포트를 `Library/ResourceRag/Cases/` 아래에 저장한다.
 
-> Unity window 기반 one-click build는 full local checkout 경로를 알아야 한다. Git URL로 패키지만 설치된 상태라면 `Sidecar Repo Root`에 전체 저장소 checkout 경로를 따로 지정해야 한다.
+> Unity window 기반 one-click build는 sidecar runtime root를 알아야 한다. Git URL로 패키지만 설치된 상태라면 `Sidecar Runtime Root`에 portable sidecar bundle 경로나 전체 저장소 checkout 경로를 따로 지정해야 한다.
+
+> non-dev 배포의 공식 방향은 embedded Python보다 `portable sidecar bundle + sidecar-local .venv bootstrap`이다. 결정 배경은 [packaged-sidecar-distribution-strategy.md](./docs/decisions/packaged-sidecar-distribution-strategy.md)에서 볼 수 있다.
 
 > `Capture Result`와 `Run Repair Handoff`는 Unity 창 안에서 계속 이어갈 수 있다. `Run Repair Handoff`는 reference 이미지가 있을 때만 활성화된다.
 

@@ -39,6 +39,7 @@ namespace UnityResourceRag.Editor
         private const string DefaultPythonExecutable = "python3";
         private const string DefaultUnityMcpBaseUrl = "http://127.0.0.1:8080";
         private const int DefaultUnityMcpTimeoutMs = 120000;
+        private const string SidecarBundleManifestFileName = "unity-resource-rag-sidecar.json";
 
         [SerializeField] private UnityResourceRagAuthMode _authMode = UnityResourceRagAuthMode.UseExistingCodexLogin;
         [SerializeField] private UnityResourceRagDraftTemplateMode _draftTemplateMode = UnityResourceRagDraftTemplateMode.Popup;
@@ -214,7 +215,7 @@ namespace UnityResourceRag.Editor
 
         public void EnsureDefaults()
         {
-            if (string.IsNullOrWhiteSpace(SidecarRepoRoot) && TryDetectSidecarRepoRoot(out var detectedRepoRoot))
+            if (string.IsNullOrWhiteSpace(SidecarRepoRoot) && TryDetectSidecarRuntimeRoot(out var detectedRepoRoot))
             {
                 SidecarRepoRoot = detectedRepoRoot;
             }
@@ -267,7 +268,7 @@ namespace UnityResourceRag.Editor
             return Path.GetFullPath(Path.Combine(baseDirectory, "auth.json"));
         }
 
-        public static bool IsSidecarRepoRoot(string candidatePath)
+        public static bool IsFullSidecarCheckoutRoot(string candidatePath)
         {
             if (string.IsNullOrWhiteSpace(candidatePath))
             {
@@ -282,10 +283,55 @@ namespace UnityResourceRag.Editor
 
             return File.Exists(Path.Combine(normalized, "requirements.txt"))
                 && File.Exists(Path.Combine(normalized, "pipeline", "mcp", "server.py"))
+                && File.Exists(Path.Combine(normalized, "pipeline", "mcp", "local_runner.py"))
+                && File.Exists(Path.Combine(normalized, "Packages", "com.hanjo92.unity-resource-rag", "package.json"));
+        }
+
+        public static bool IsPackagedSidecarBundleRoot(string candidatePath)
+        {
+            if (string.IsNullOrWhiteSpace(candidatePath))
+            {
+                return false;
+            }
+
+            string normalized = NormalizePath(candidatePath);
+            if (string.IsNullOrWhiteSpace(normalized) || !Directory.Exists(normalized))
+            {
+                return false;
+            }
+
+            return File.Exists(Path.Combine(normalized, SidecarBundleManifestFileName))
+                && File.Exists(Path.Combine(normalized, "requirements.txt"))
+                && File.Exists(Path.Combine(normalized, "pipeline", "mcp", "server.py"))
                 && File.Exists(Path.Combine(normalized, "pipeline", "mcp", "local_runner.py"));
         }
 
-        public static bool TryDetectSidecarRepoRoot(out string repoRoot)
+        public static bool IsSidecarRuntimeRoot(string candidatePath)
+        {
+            return IsFullSidecarCheckoutRoot(candidatePath) || IsPackagedSidecarBundleRoot(candidatePath);
+        }
+
+        public static bool IsSidecarRepoRoot(string candidatePath)
+        {
+            return IsSidecarRuntimeRoot(candidatePath);
+        }
+
+        public static string DescribeSidecarRuntimeRoot(string candidatePath)
+        {
+            if (IsPackagedSidecarBundleRoot(candidatePath))
+            {
+                return "portable sidecar bundle";
+            }
+
+            if (IsFullSidecarCheckoutRoot(candidatePath))
+            {
+                return "full unity-resource-rag checkout";
+            }
+
+            return "invalid sidecar runtime";
+        }
+
+        public static bool TryDetectSidecarRuntimeRoot(out string repoRoot)
         {
             repoRoot = string.Empty;
             UnityEditor.PackageManager.PackageInfo packageInfo =
@@ -305,7 +351,7 @@ namespace UnityResourceRag.Editor
 
             foreach (string candidate in candidates)
             {
-                if (!IsSidecarRepoRoot(candidate))
+                if (!IsSidecarRuntimeRoot(candidate))
                 {
                     continue;
                 }
@@ -315,6 +361,11 @@ namespace UnityResourceRag.Editor
             }
 
             return false;
+        }
+
+        public static bool TryDetectSidecarRepoRoot(out string repoRoot)
+        {
+            return TryDetectSidecarRuntimeRoot(out repoRoot);
         }
 
         public static string GetSuggestedGoal(UnityResourceRagDraftTemplateMode mode)

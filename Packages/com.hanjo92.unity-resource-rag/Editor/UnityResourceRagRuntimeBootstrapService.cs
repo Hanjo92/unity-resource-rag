@@ -26,9 +26,9 @@ namespace UnityResourceRag.Editor
         public static bool TryRunAsync(UnityResourceRagEditorSettings settings, Action<UnityResourceRagRuntimeBootstrapResult> onComplete, out string error)
         {
             settings.EnsureDefaults();
-            if (!UnityResourceRagEditorSettings.IsSidecarRepoRoot(settings.SidecarRepoRoot))
+            if (!UnityResourceRagEditorSettings.IsSidecarRuntimeRoot(settings.SidecarRepoRoot))
             {
-                error = "A full unity-resource-rag checkout path is required. Set Sidecar Repo Root first.";
+                error = "A portable sidecar bundle or full unity-resource-rag checkout path is required. Set Sidecar Runtime Root first.";
                 return false;
             }
 
@@ -56,11 +56,11 @@ namespace UnityResourceRag.Editor
             result.RecommendedPythonExecutable = venvPython;
 
             result.Steps.Add($"Bootstrap base Python: {bootstrapPython}");
-            result.Steps.Add($"Repo-local runtime target: {venvPython}");
+            result.Steps.Add($"Sidecar-local runtime target: {venvPython}");
 
             if (string.IsNullOrWhiteSpace(venvPython))
             {
-                result.Errors.Add("Could not resolve the repo-local `.venv` path.");
+                result.Errors.Add("Could not resolve the sidecar-local `.venv` path.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -69,7 +69,7 @@ namespace UnityResourceRag.Editor
             {
                 settings.PythonExecutable = venvPython;
                 settings.SaveSettings();
-                result.Steps.Add("Found an existing ready-to-use repo-local Python runtime.");
+                result.Steps.Add("Found an existing ready-to-use sidecar-local Python runtime.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -82,7 +82,7 @@ namespace UnityResourceRag.Editor
                     $"-m venv {Quote(Path.Combine(repoRoot, ".venv"))}",
                     repoRoot,
                     BootstrapTimeoutMs);
-                AppendCommandResult(result, createVenv, "Created the repo-local `.venv`.");
+                AppendCommandResult(result, createVenv, "Created the sidecar-local `.venv`.");
                 if (!createVenv.Success)
                 {
                     result.Summary = BuildSummary(result);
@@ -103,7 +103,7 @@ namespace UnityResourceRag.Editor
 
             if (!Directory.Exists(venvDirectory))
             {
-                result.Errors.Add("The repo-local Python runtime was not created.");
+                result.Errors.Add("The sidecar-local Python runtime was not created.");
                 result.Summary = BuildSummary(result);
                 return result;
             }
@@ -113,7 +113,7 @@ namespace UnityResourceRag.Editor
                 $"-m pip install -r {Quote(requirementsPath)}",
                 repoRoot,
                 BootstrapTimeoutMs);
-            AppendCommandResult(result, installRequirements, "Installed the requirements into the repo-local Python runtime.");
+            AppendCommandResult(result, installRequirements, "Installed the requirements into the sidecar-local Python runtime.");
             if (!installRequirements.Success)
             {
                 result.Summary = BuildSummary(result);
@@ -129,7 +129,7 @@ namespace UnityResourceRag.Editor
 
             settings.PythonExecutable = venvPython;
             settings.SaveSettings();
-            result.Steps.Add("Saved the repo-local Python runtime as the default interpreter for Unity Resource RAG.");
+            result.Steps.Add("Saved the sidecar-local Python runtime as the default interpreter for Unity Resource RAG.");
             result.Summary = BuildSummary(result);
             return result;
         }

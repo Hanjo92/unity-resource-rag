@@ -152,22 +152,22 @@ namespace UnityResourceRag.Editor
             }
 
             DrawPathField(
-                "Sidecar Repo Root",
+                "Sidecar Runtime Root",
                 settings.SidecarRepoRoot,
                 "Browse",
-                () => settings.SidecarRepoRoot = EditorUtility.OpenFolderPanel("Select unity-resource-rag repo root", settings.SidecarRepoRoot, string.Empty));
+                () => settings.SidecarRepoRoot = EditorUtility.OpenFolderPanel("Select sidecar runtime root", settings.SidecarRepoRoot, string.Empty));
 
             using (new EditorGUILayout.HorizontalScope())
             {
                 if (GUILayout.Button("Auto Detect Repo Root", GUILayout.Width(180f)))
                 {
-                    if (UnityResourceRagEditorSettings.TryDetectSidecarRepoRoot(out string detectedRepoRoot))
+                    if (UnityResourceRagEditorSettings.TryDetectSidecarRuntimeRoot(out string detectedRepoRoot))
                     {
                         settings.SidecarRepoRoot = detectedRepoRoot;
                     }
                     else
                     {
-                        _setupReport = "Auto detection could not find a full unity-resource-rag checkout. Set Sidecar Repo Root manually.";
+                        _setupReport = "Auto detection could not find a supported sidecar runtime. Set Sidecar Runtime Root manually, or point it to a portable sidecar bundle.";
                     }
                 }
 
@@ -594,7 +594,7 @@ namespace UnityResourceRag.Editor
         private void RunRuntimeBootstrap(UnityResourceRagEditorSettings settings)
         {
             _isBootstrapRunning = true;
-            _bootstrapReport = "Starting Python runtime bootstrap.\nThe window is preparing a repo-local `.venv` and installing requirements in the background.";
+            _bootstrapReport = "Starting Python runtime bootstrap.\nThe window is preparing a sidecar-local `.venv` and installing requirements in the background.";
             Repaint();
 
             if (!UnityResourceRagRuntimeBootstrapService.TryRunAsync(settings, OnRuntimeBootstrapCompleted, out string error))

@@ -208,11 +208,11 @@ namespace UnityResourceRag.Editor
         private static PreparedToolRun PrepareToolRun(UnityResourceRagEditorSettings settings, string toolName, Dictionary<string, object> payload, out UnityResourceRagLocalToolResult immediateFailure)
         {
             immediateFailure = null;
-            if (!UnityResourceRagEditorSettings.IsSidecarRepoRoot(settings.SidecarRepoRoot))
+            if (!UnityResourceRagEditorSettings.IsSidecarRuntimeRoot(settings.SidecarRepoRoot))
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = "The sidecar repo root is not valid. Set it to a full unity-resource-rag checkout path.",
+                    Error = "The sidecar runtime root is not valid. Set it to a portable sidecar bundle or a full unity-resource-rag checkout path.",
                 };
                 return null;
             }

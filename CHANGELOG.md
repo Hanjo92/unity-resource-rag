@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - renamed readiness auth status from provider-centric wording to `AI Access` summaries that explain the next action in user language
 - generalized catalog-first draft templates beyond popup-only mode so `popup`, `hud`, and `list` drafts can be selected from the Unity window and MCP entrypoints
 - added a `Last Run Artifacts` panel in the Unity window so blueprint, search report, handoff, capture, repair, and case export outputs can be reopened without digging through logs
+- standardized MCP tool, provider setup, and doctor strings in English so MCP clients do not show `?` for tool descriptions and next-action messages
+- decided the non-dev distribution direction as `portable sidecar bundle + sidecar-local .venv bootstrap`, and added a bundle build script plus Unity wording that accepts either a portable bundle or a full checkout as the sidecar runtime root
 
 ## [0.5.0] - 2026-03-22
 
