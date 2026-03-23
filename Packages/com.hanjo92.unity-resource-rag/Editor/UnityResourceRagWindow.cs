@@ -18,6 +18,7 @@ namespace UnityResourceRag.Editor
         private string _buildPhase = "Idle";
         private string _caseName = string.Empty;
         private string _caseNotes = string.Empty;
+        private bool _showAdvancedSetup;
         private bool _isReadinessRunning;
         private bool _isBootstrapRunning;
         private bool _isBuildRunning;
@@ -128,13 +129,24 @@ namespace UnityResourceRag.Editor
 
         private void DrawQuickSetupSection(UnityResourceRagEditorSettings settings)
         {
+            UnityResourceRagAuthProfileInfo authProfile = UnityResourceRagAuthProfilePresenter.Describe(settings);
+
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("Quick Setup", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "Quick Setup configures the Unity MCP transport, custom tool exposure, and the Codex sidecar entry. Python dependencies are handled by Bootstrap Python Runtime below.",
                 MessageType.None);
 
-            settings.AuthMode = (UnityResourceRagAuthMode)EditorGUILayout.EnumPopup("Auth Mode", settings.AuthMode);
+            settings.AuthMode = (UnityResourceRagAuthMode)EditorGUILayout.EnumPopup("Sign-in Method", settings.AuthMode);
+            authProfile = UnityResourceRagAuthProfilePresenter.Describe(settings);
+
+            using (new EditorGUILayout.VerticalScope("box"))
+            {
+                EditorGUILayout.LabelField(authProfile.Title, EditorStyles.boldLabel);
+                EditorGUILayout.HelpBox(authProfile.Summary, MessageType.None);
+                EditorGUILayout.LabelField("What to expect", EditorStyles.miniBoldLabel);
+                EditorGUILayout.LabelField(authProfile.NextStep, EditorStyles.wordWrappedMiniLabel);
+            }
 
             DrawPathField(
                 "Sidecar Repo Root",
@@ -159,17 +171,28 @@ namespace UnityResourceRag.Editor
                 GUILayout.FlexibleSpace();
             }
 
-            settings.PythonExecutable = EditorGUILayout.TextField("Python Executable", settings.PythonExecutable);
-            settings.UnityMcpBaseUrl = EditorGUILayout.TextField("Unity MCP Base URL", settings.UnityMcpBaseUrl);
-            settings.CodexConfigPath = EditorGUILayout.TextField("Codex Config Path", settings.CodexConfigPath);
-
-            if (settings.AuthMode == UnityResourceRagAuthMode.UseExistingCodexLogin)
+            if (authProfile.ShowApiKeyEnvField)
             {
-                settings.CodexAuthFile = EditorGUILayout.TextField("Codex Auth File", settings.CodexAuthFile);
+                settings.ProviderApiKeyEnv = EditorGUILayout.TextField("Environment Variable Name", settings.ProviderApiKeyEnv);
             }
-            else if (settings.AuthMode == UnityResourceRagAuthMode.UseApiKeyEnvironmentVariable)
+
+            _showAdvancedSetup = EditorGUILayout.Foldout(_showAdvancedSetup, "Advanced Paths & Overrides", true);
+            if (_showAdvancedSetup)
             {
-                settings.ProviderApiKeyEnv = EditorGUILayout.TextField("API Key Env", settings.ProviderApiKeyEnv);
+                settings.PythonExecutable = EditorGUILayout.TextField("Python Executable", settings.PythonExecutable);
+                settings.UnityMcpBaseUrl = EditorGUILayout.TextField("Unity MCP Base URL", settings.UnityMcpBaseUrl);
+                settings.CodexConfigPath = EditorGUILayout.TextField("Codex Config Path", settings.CodexConfigPath);
+
+                if (authProfile.ShowCodexAuthOverrideField)
+                {
+                    settings.CodexAuthFile = EditorGUILayout.TextField("Custom Codex Auth File (Optional)", settings.CodexAuthFile);
+                }
+                else if (authProfile.ShowApiKeyEnvField)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Only enter the environment variable name here. Do not paste the API key value into Unity.",
+                        MessageType.None);
+                }
             }
 
             if (GUILayout.Button("Quick Setup", GUILayout.Height(28f)))

@@ -24,11 +24,12 @@
 1. 이 패키지를 Unity 프로젝트의 `Packages/` 아래에 두거나 git path로 설치한다.
 2. 가능하면 local checkout의 `file:` 경로로 연결한다. `Window > Unity Resource RAG`의 one-click build는 루트 `pipeline/` sidecar에 접근해야 한다.
 3. `unity-mcp`가 설치된 프로젝트에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 누른다.
-4. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 repo-local `.venv`를 준비한다.
-5. 같은 창에서 reference 이미지를 넣거나, goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
-6. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`까지 이어서 진행할 수 있다.
-7. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
-8. `ui_asset_catalog`는 callable tool이 아니라 MCP resource라는 점을 기억한다.
+4. Quick Setup 안의 sign-in method는 기본적으로 `Use my Codex sign-in (Recommended)`로 두는 것을 권장한다. API key 자체를 Unity에 붙여넣는 대신, 이미 로그인된 Codex 세션이나 기존 environment variable을 재사용하는 흐름이다.
+5. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 repo-local `.venv`를 준비한다.
+6. 같은 창에서 reference 이미지를 넣거나, goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
+7. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`까지 이어서 진행할 수 있다.
+8. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
+9. `ui_asset_catalog`는 callable tool이 아니라 MCP resource라는 점을 기억한다.
 
 `Quick Setup`이 하는 일:
 
@@ -40,10 +41,16 @@
 
 `Readiness Dashboard`가 하는 일:
 
-- `repo / python / provider login / Unity Editor connection / build input` 상태를 `Ready / Attention / Blocked`로 요약
+- `repo / python / AI access / Unity Editor connection / build input` 상태를 `Ready / Attention / Blocked`로 요약
 - raw MCP jargon 대신 다음 액션 중심 문장으로 현재 막힌 지점을 설명
 - `Refresh Readiness`로 현재 상태를 다시 확인
 - `Bootstrap Python Runtime`으로 repo-local `.venv` 생성과 requirements 설치 시도
+
+`Sign-in Method`가 의미하는 것:
+
+- `Use my Codex sign-in (Recommended)`: 현재 Codex 로그인 상태를 재사용한다. 기본 auth file 위치가 아니면 `Advanced Paths & Overrides`에서 custom auth file만 지정하면 된다.
+- `Use an API key from my environment`: API key 문자열이 아니라 environment variable 이름만 Unity에 저장한다.
+- `Stay offline with local fallback`: hosted model 없이 catalog-first draft와 Unity apply 흐름만 검증한다.
 
 `Start UI Build`가 하는 일:
 

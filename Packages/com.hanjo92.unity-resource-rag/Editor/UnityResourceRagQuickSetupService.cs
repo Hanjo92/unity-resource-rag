@@ -148,11 +148,11 @@ namespace UnityResourceRag.Editor
             {
                 if (settings.HasReadableCodexAuthFile)
                 {
-                    result.Steps.Add($"Found the Codex auth file: {settings.CodexAuthFile}");
+                    result.Steps.Add("Configured the window to reuse the current Codex sign-in.");
                 }
                 else
                 {
-                    result.Warnings.Add("The Codex auth file was not found. The build can still continue with `recommended_auto` or local fallback, but OpenAI calls may fail.");
+                    result.Warnings.Add("No Codex sign-in was found in the default auth file locations. Hosted model calls may fail until you sign in again or point the window to a custom auth file override.");
                 }
                 return;
             }
@@ -162,16 +162,16 @@ namespace UnityResourceRag.Editor
                 string envName = settings.ProviderApiKeyEnv;
                 if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(envName)))
                 {
-                    result.Warnings.Add($"The environment variable `{envName}` is currently empty.");
+                    result.Warnings.Add($"No value was found in the API key environment variable `{envName}`.");
                 }
                 else
                 {
-                    result.Steps.Add($"Prepared to use the API key environment variable `{envName}`.");
+                    result.Steps.Add($"Configured the window to use the API key environment variable `{envName}`.");
                 }
                 return;
             }
 
-            result.Steps.Add("Configured the window to use Offline local fallback mode.");
+            result.Steps.Add("Configured the window to stay in Offline local fallback mode.");
         }
 
         private static void SyncCodexConfig(UnityResourceRagEditorSettings settings, UnityResourceRagQuickSetupResult result)

@@ -63,7 +63,7 @@ pip install -r requirements.txt
 2. 이 저장소의 [Packages/com.hanjo92.unity-resource-rag](./Packages/com.hanjo92.unity-resource-rag)를 `Packages/` 아래에 두거나 Git URL로 설치한다.
 3. 가능하면 이 저장소 전체를 local checkout으로 두고 package를 `file:` 경로로 연결한다. `Window > Unity Resource RAG`의 one-click build는 패키지 내부 코드뿐 아니라 루트 `pipeline/` sidecar도 필요하다.
 4. Unity에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 한 번 실행한다. 이 버튼은 Unity MCP를 HTTP Local로 맞추고, `Project Scoped Tools`를 끄고, custom tool/resource 노출과 Codex config 동기화를 함께 시도한다.
-5. Readiness Dashboard에서 `repo / python / provider login / Unity Editor connection / build input` 상태를 확인한다. Python이 막혀 있으면 같은 창에서 `Bootstrap Python Runtime`으로 repo-local `.venv`와 requirements를 준비할 수 있다.
+5. Readiness Dashboard에서 `repo / python / AI access / Unity Editor connection / build input` 상태를 확인한다. Python이 막혀 있으면 같은 창에서 `Bootstrap Python Runtime`으로 repo-local `.venv`와 requirements를 준비할 수 있다.
 6. Unity에서 discovery와 resource registration이 완료되면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`는 custom tool로, `ui_asset_catalog`는 MCP resource로 사용할 수 있다.
 7. sidecar와 gateway를 같이 띄울 때는 `unity-mcp`의 기본 `127.0.0.1:8080/mcp`와 겹치지 않도록 gateway 기본 URL `http://127.0.0.1:8090`을 사용한다.
 
@@ -110,13 +110,14 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 ### 기본 흐름
 
 1. Unity에서 `Window > Unity Resource RAG`를 열고 `Quick Setup`을 누른다.
-2. 같은 창의 Readiness Dashboard에서 `Refresh Readiness`를 눌러 현재 상태를 확인한다.
-3. Python runtime이 막혀 있으면 `Bootstrap Python Runtime`을 먼저 실행한다.
-4. reference 이미지를 넣거나, 비워둔 채 goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
-5. 이 버튼은 내부적으로 readiness를 다시 확인한 뒤 `unity_rag.start_ui_build`를 호출하고, reference가 있으면 `run_first_pass_ui_build`, 없으면 `run_catalog_draft_ui_build`를 자동 선택한다.
-6. build가 끝나면 같은 창에서 `Capture Result`로 현재 Unity 결과를 캡처한다.
-7. reference build였다면 `Run Repair Handoff`로 mismatch report와 repair bundle을 만든다.
-8. 검토 케이스를 남기고 싶으면 `Export Case Report`로 md/json 리포트를 `Library/ResourceRag/Cases/` 아래에 저장한다.
+2. sign-in method는 기본적으로 `Use my Codex sign-in (Recommended)`로 두고, 필요할 때만 API key environment mode나 offline mode로 바꾼다.
+3. 같은 창의 Readiness Dashboard에서 `Refresh Readiness`를 눌러 현재 상태를 확인한다.
+4. Python runtime이 막혀 있으면 `Bootstrap Python Runtime`을 먼저 실행한다.
+5. reference 이미지를 넣거나, 비워둔 채 goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
+6. 이 버튼은 내부적으로 readiness를 다시 확인한 뒤 `unity_rag.start_ui_build`를 호출하고, reference가 있으면 `run_first_pass_ui_build`, 없으면 `run_catalog_draft_ui_build`를 자동 선택한다.
+7. build가 끝나면 같은 창에서 `Capture Result`로 현재 Unity 결과를 캡처한다.
+8. reference build였다면 `Run Repair Handoff`로 mismatch report와 repair bundle을 만든다.
+9. 검토 케이스를 남기고 싶으면 `Export Case Report`로 md/json 리포트를 `Library/ResourceRag/Cases/` 아래에 저장한다.
 
 > Unity window 기반 one-click build는 full local checkout 경로를 알아야 한다. Git URL로 패키지만 설치된 상태라면 `Sidecar Repo Root`에 전체 저장소 checkout 경로를 따로 지정해야 한다.
 

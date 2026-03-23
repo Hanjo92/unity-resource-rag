@@ -323,46 +323,46 @@ namespace UnityResourceRag.Editor
                     {
                         return new UnityResourceRagReadinessItem
                         {
-                            Title = "Provider Login",
+                            Title = "AI Access",
                             Level = UnityResourceRagReadinessLevel.Ready,
-                            Summary = "The existing Codex login can be reused as-is.",
-                            NextStep = settings.CodexAuthFile,
+                            Summary = "Your current Codex sign-in is ready to use.",
+                            NextStep = "No extra key entry is required unless you want to override the default auth file location.",
                         };
                     }
 
                     return new UnityResourceRagReadinessItem
                     {
-                        Title = "Provider Login",
+                        Title = "AI Access",
                         Level = UnityResourceRagReadinessLevel.Attention,
-                        Summary = "The Codex auth file has not been found yet.",
-                        NextStep = "Check whether you are signed in to Codex, or switch to Offline local for a first test.",
+                        Summary = "No Codex sign-in was found in the default auth file locations yet.",
+                        NextStep = "Sign in to Codex, point the window to a custom auth file override, or switch to Offline local for a first test.",
                     };
                 case UnityResourceRagAuthMode.UseApiKeyEnvironmentVariable:
                     if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(settings.ProviderApiKeyEnv)))
                     {
                         return new UnityResourceRagReadinessItem
                         {
-                            Title = "Provider Login",
+                            Title = "AI Access",
                             Level = UnityResourceRagReadinessLevel.Ready,
-                            Summary = $"The API key environment variable `{settings.ProviderApiKeyEnv}` is ready to use.",
-                            NextStep = "This mode will prefer the configured API key environment variable.",
+                            Summary = "An API key is available through the configured environment variable.",
+                            NextStep = $"Current variable name: {settings.ProviderApiKeyEnv}",
                         };
                     }
 
                     return new UnityResourceRagReadinessItem
                     {
-                        Title = "Provider Login",
+                        Title = "AI Access",
                         Level = UnityResourceRagReadinessLevel.Attention,
-                        Summary = $"The API key environment variable `{settings.ProviderApiKeyEnv}` is empty.",
-                        NextStep = "Set the environment variable or switch back to Use existing Codex login.",
+                        Summary = "No API key value was found in the configured environment variable.",
+                        NextStep = $"Set `{settings.ProviderApiKeyEnv}` in your environment or switch back to Use my Codex sign-in.",
                     };
                 default:
                     return new UnityResourceRagReadinessItem
                     {
-                        Title = "Provider Login",
+                        Title = "AI Access",
                         Level = UnityResourceRagReadinessLevel.Ready,
-                        Summary = "Offline local fallback is available for testing.",
-                        NextStep = "You can still verify the catalog-first draft and apply flow without an internet connection.",
+                        Summary = "Offline local fallback is selected for this project.",
+                        NextStep = "This mode is useful when you only want to validate catalog-first draft and apply behavior without hosted model access.",
                     };
             }
         }

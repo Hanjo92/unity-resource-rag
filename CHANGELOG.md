@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- simplified the Unity window auth wording around three user-facing sign-in methods: current Codex sign-in, API key from environment, and offline local fallback
+- moved Codex auth file overrides into the advanced setup area so first-run users can stay on the recommended sign-in path without seeing low-level preset jargon
+- renamed readiness auth status from provider-centric wording to `AI Access` summaries that explain the next action in user language
+
 ## [0.5.0] - 2026-03-22
 
 Stable Unity-first usability release for `unity-resource-rag`.

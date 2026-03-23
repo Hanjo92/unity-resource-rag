@@ -11,13 +11,13 @@ namespace UnityResourceRag.Editor
 {
     public enum UnityResourceRagAuthMode
     {
-        [InspectorName("Use existing Codex login (Recommended)")]
+        [InspectorName("Use my Codex sign-in (Recommended)")]
         UseExistingCodexLogin = 0,
 
-        [InspectorName("Use API key environment variable")]
+        [InspectorName("Use an API key from my environment")]
         UseApiKeyEnvironmentVariable = 1,
 
-        [InspectorName("Offline local fallback")]
+        [InspectorName("Stay offline with local fallback")]
         OfflineLocal = 2,
     }
 
