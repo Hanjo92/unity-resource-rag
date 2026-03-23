@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-24
+
+Unity usability follow-up release for `unity-resource-rag`.
+
 ### Changed
 
 - simplified the Unity window auth wording around three user-facing sign-in methods: current Codex sign-in, API key from environment, and offline local fallback

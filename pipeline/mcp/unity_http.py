@@ -156,7 +156,7 @@ class UnityMcpHttpClient:
                 "capabilities": {},
                 "clientInfo": {
                     "name": "unity-resource-rag",
-                    "version": "0.4.0-beta",
+                    "version": "0.6.0",
                 },
             },
         }
