@@ -21,20 +21,27 @@ namespace UnityResourceRag.Editor
         OfflineLocal = 2,
     }
 
+    public enum UnityResourceRagDraftTemplateMode
+    {
+        [InspectorName("Popup / Modal")]
+        Popup = 0,
+
+        [InspectorName("HUD / Top Bar")]
+        Hud = 1,
+
+        [InspectorName("List / Inventory")]
+        List = 2,
+    }
+
     [FilePath("ProjectSettings/UnityResourceRagSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     public sealed class UnityResourceRagEditorSettings : ScriptableSingleton<UnityResourceRagEditorSettings>
     {
         private const string DefaultPythonExecutable = "python3";
         private const string DefaultUnityMcpBaseUrl = "http://127.0.0.1:8080";
-        private const string DefaultScreenName = "ResourceRagDraft";
-        private const string DefaultGoal = "reward popup";
-        private const string DefaultTitle = "Reward Unlocked";
-        private const string DefaultBody = "Catalog-first popup draft";
-        private const string DefaultPrimaryAction = "CLAIM";
-        private const string DefaultSecondaryAction = "CLOSE";
         private const int DefaultUnityMcpTimeoutMs = 120000;
 
         [SerializeField] private UnityResourceRagAuthMode _authMode = UnityResourceRagAuthMode.UseExistingCodexLogin;
+        [SerializeField] private UnityResourceRagDraftTemplateMode _draftTemplateMode = UnityResourceRagDraftTemplateMode.Popup;
         [SerializeField] private string _sidecarRepoRoot = string.Empty;
         [SerializeField] private string _pythonExecutable = DefaultPythonExecutable;
         [SerializeField] private string _unityMcpBaseUrl = DefaultUnityMcpBaseUrl;
@@ -46,17 +53,23 @@ namespace UnityResourceRag.Editor
         [SerializeField] private bool _validateBeforeApply = true;
         [SerializeField] private bool _forceReindex = false;
         [SerializeField] private string _referenceImagePath = string.Empty;
-        [SerializeField] private string _goal = DefaultGoal;
-        [SerializeField] private string _screenName = DefaultScreenName;
-        [SerializeField] private string _title = DefaultTitle;
-        [SerializeField] private string _body = DefaultBody;
-        [SerializeField] private string _primaryActionLabel = DefaultPrimaryAction;
-        [SerializeField] private string _secondaryActionLabel = DefaultSecondaryAction;
+        [SerializeField] private string _goal = "reward popup";
+        [SerializeField] private string _screenName = "ResourceRagDraft";
+        [SerializeField] private string _title = "Reward Unlocked";
+        [SerializeField] private string _body = "Catalog-first popup draft";
+        [SerializeField] private string _primaryActionLabel = "CLAIM";
+        [SerializeField] private string _secondaryActionLabel = "CLOSE";
 
         public UnityResourceRagAuthMode AuthMode
         {
             get => _authMode;
             set => _authMode = value;
+        }
+
+        public UnityResourceRagDraftTemplateMode DraftTemplateMode
+        {
+            get => _draftTemplateMode;
+            set => _draftTemplateMode = value;
         }
 
         public string SidecarRepoRoot
@@ -129,38 +142,38 @@ namespace UnityResourceRag.Editor
 
         public string Goal
         {
-            get => string.IsNullOrWhiteSpace(_goal) ? DefaultGoal : _goal;
-            set => _goal = string.IsNullOrWhiteSpace(value) ? DefaultGoal : value.Trim();
+            get => string.IsNullOrWhiteSpace(_goal) ? GetSuggestedGoal(DraftTemplateMode) : _goal;
+            set => _goal = string.IsNullOrWhiteSpace(value) ? GetSuggestedGoal(DraftTemplateMode) : value.Trim();
         }
 
         public string ScreenName
         {
-            get => string.IsNullOrWhiteSpace(_screenName) ? DefaultScreenName : _screenName.Trim();
-            set => _screenName = string.IsNullOrWhiteSpace(value) ? DefaultScreenName : value.Trim();
+            get => string.IsNullOrWhiteSpace(_screenName) ? GetSuggestedScreenName(DraftTemplateMode) : _screenName.Trim();
+            set => _screenName = string.IsNullOrWhiteSpace(value) ? GetSuggestedScreenName(DraftTemplateMode) : value.Trim();
         }
 
         public string Title
         {
-            get => string.IsNullOrWhiteSpace(_title) ? DefaultTitle : _title;
-            set => _title = string.IsNullOrWhiteSpace(value) ? DefaultTitle : value.Trim();
+            get => string.IsNullOrWhiteSpace(_title) ? GetSuggestedTitle(DraftTemplateMode) : _title;
+            set => _title = string.IsNullOrWhiteSpace(value) ? GetSuggestedTitle(DraftTemplateMode) : value.Trim();
         }
 
         public string Body
         {
-            get => string.IsNullOrWhiteSpace(_body) ? DefaultBody : _body;
-            set => _body = string.IsNullOrWhiteSpace(value) ? DefaultBody : value.Trim();
+            get => string.IsNullOrWhiteSpace(_body) ? GetSuggestedBody(DraftTemplateMode) : _body;
+            set => _body = string.IsNullOrWhiteSpace(value) ? GetSuggestedBody(DraftTemplateMode) : value.Trim();
         }
 
         public string PrimaryActionLabel
         {
-            get => string.IsNullOrWhiteSpace(_primaryActionLabel) ? DefaultPrimaryAction : _primaryActionLabel;
-            set => _primaryActionLabel = string.IsNullOrWhiteSpace(value) ? DefaultPrimaryAction : value.Trim();
+            get => string.IsNullOrWhiteSpace(_primaryActionLabel) ? GetSuggestedPrimaryAction(DraftTemplateMode) : _primaryActionLabel;
+            set => _primaryActionLabel = string.IsNullOrWhiteSpace(value) ? GetSuggestedPrimaryAction(DraftTemplateMode) : value.Trim();
         }
 
         public string SecondaryActionLabel
         {
-            get => string.IsNullOrWhiteSpace(_secondaryActionLabel) ? DefaultSecondaryAction : _secondaryActionLabel;
-            set => _secondaryActionLabel = string.IsNullOrWhiteSpace(value) ? DefaultSecondaryAction : value.Trim();
+            get => string.IsNullOrWhiteSpace(_secondaryActionLabel) ? GetSuggestedSecondaryAction(DraftTemplateMode) : _secondaryActionLabel;
+            set => _secondaryActionLabel = string.IsNullOrWhiteSpace(value) ? GetSuggestedSecondaryAction(DraftTemplateMode) : value.Trim();
         }
 
         public string UnityProjectPath => Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
@@ -179,6 +192,22 @@ namespace UnityResourceRag.Editor
                         return "offline_local";
                     default:
                         return HasReadableCodexAuthFile ? "codex_oauth" : "recommended_auto";
+                }
+            }
+        }
+
+        public string EffectiveTemplateMode
+        {
+            get
+            {
+                switch (DraftTemplateMode)
+                {
+                    case UnityResourceRagDraftTemplateMode.Hud:
+                        return "hud";
+                    case UnityResourceRagDraftTemplateMode.List:
+                        return "list";
+                    default:
+                        return "popup";
                 }
             }
         }
@@ -207,6 +236,16 @@ namespace UnityResourceRag.Editor
             Body = Body;
             PrimaryActionLabel = PrimaryActionLabel;
             SecondaryActionLabel = SecondaryActionLabel;
+        }
+
+        public void ApplyDraftTemplateDefaults()
+        {
+            Goal = GetSuggestedGoal(DraftTemplateMode);
+            ScreenName = GetSuggestedScreenName(DraftTemplateMode);
+            Title = GetSuggestedTitle(DraftTemplateMode);
+            Body = GetSuggestedBody(DraftTemplateMode);
+            PrimaryActionLabel = GetSuggestedPrimaryAction(DraftTemplateMode);
+            SecondaryActionLabel = GetSuggestedSecondaryAction(DraftTemplateMode);
         }
 
         public void SaveSettings()
@@ -276,6 +315,84 @@ namespace UnityResourceRag.Editor
             }
 
             return false;
+        }
+
+        public static string GetSuggestedGoal(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "resource hud";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "inventory list";
+                default:
+                    return "reward popup";
+            }
+        }
+
+        public static string GetSuggestedScreenName(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "ResourceHudDraft";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "InventoryListDraft";
+                default:
+                    return "ResourceRagDraft";
+            }
+        }
+
+        public static string GetSuggestedTitle(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "Night Shift HUD";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "Night Shift Inventory";
+                default:
+                    return "Reward Unlocked";
+            }
+        }
+
+        public static string GetSuggestedBody(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "Track health, currency, and active shift bonuses in a compact HUD draft.";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "Catalog-first list draft for inventory, shop, or mission rows.";
+                default:
+                    return "Catalog-first popup draft";
+            }
+        }
+
+        public static string GetSuggestedPrimaryAction(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "BOOST";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "OPEN";
+                default:
+                    return "CLAIM";
+            }
+        }
+
+        public static string GetSuggestedSecondaryAction(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "MAP";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "CLOSE";
+                default:
+                    return "CLOSE";
+            }
         }
 
         public static bool TryDetectWorkingPythonExecutable(string sidecarRepoRoot, out string executablePath)

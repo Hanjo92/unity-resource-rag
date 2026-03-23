@@ -181,7 +181,9 @@ class CatalogDraftToolTests(unittest.TestCase):
 
             payload = _tool_payload(result)
             self.assertTrue(payload["catalogIndexed"])
+            self.assertEqual(payload["templateMode"], "popup")
             self.assertEqual(payload["draftMode"], "shell_prefab")
+            self.assertEqual(payload["shellSourceMode"], "shell_prefab")
             self.assertEqual(payload["unityApply"]["invocationMode"], "direct")
             self.assertEqual(payload["verifyRequest"]["tool"], "manage_camera")
             self.assertEqual([name for name, _ in calls], ["index_project_resources", "apply_ui_blueprint", "apply_ui_blueprint"])
@@ -266,7 +268,9 @@ class CatalogDraftToolTests(unittest.TestCase):
                 )
 
             payload = _tool_payload(result)
+            self.assertEqual(payload["templateMode"], "popup")
             self.assertEqual(payload["draftMode"], "panel_sprite")
+            self.assertEqual(payload["shellSourceMode"], "panel_sprite")
             self.assertIsNone(payload["unityApply"])
             self.assertIn("panel sprite", " ".join(payload["nextActions"]))
 
@@ -275,6 +279,211 @@ class CatalogDraftToolTests(unittest.TestCase):
             shell_node = blueprint["root"]["children"][0]["children"][0]
             self.assertEqual(shell_node["kind"], "image")
             self.assertEqual(shell_node["image"]["type"], "Sliced")
+
+    def test_run_catalog_draft_ui_build_builds_hud_template(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            unity_project_path = temp_path / "Project"
+            for dirname in ("Assets", "Packages", "ProjectSettings"):
+                (unity_project_path / dirname).mkdir(parents=True, exist_ok=True)
+
+            catalog_path = unity_project_path / "Library/ResourceRag/resource_catalog.jsonl"
+            records = [
+                {
+                    "id": "hud-panel",
+                    "guid": "guid-hud-panel",
+                    "localFileId": 21300011,
+                    "path": "Assets/UI/HudBar.png",
+                    "subAssetName": "HudBar",
+                    "assetType": "Sprite",
+                    "name": "HudBar",
+                    "semanticText": "hud overlay top bar panel background",
+                    "uiHints": {"isNineSliceCandidate": True},
+                    "binding": {
+                        "kind": "sprite",
+                        "unityLoadPath": "Assets/UI/HudBar.png",
+                        "subAssetName": "HudBar",
+                        "localFileId": 21300011,
+                    },
+                },
+                {
+                    "id": "status-icon",
+                    "guid": "guid-status-icon",
+                    "localFileId": 21300012,
+                    "path": "Assets/UI/CoinIcon.png",
+                    "subAssetName": "CoinIcon",
+                    "assetType": "Sprite",
+                    "name": "CoinIcon",
+                    "semanticText": "status resource currency icon",
+                    "binding": {
+                        "kind": "sprite",
+                        "unityLoadPath": "Assets/UI/CoinIcon.png",
+                        "subAssetName": "CoinIcon",
+                        "localFileId": 21300012,
+                    },
+                },
+                {
+                    "id": "hud-title-font",
+                    "guid": "guid-hud-title-font",
+                    "path": "Assets/UI/Fonts/HudTitle.asset",
+                    "assetType": "TMP_FontAsset",
+                    "name": "HudTitle",
+                    "semanticText": "hud title font",
+                    "binding": {"kind": "tmp_font", "unityLoadPath": "Assets/UI/Fonts/HudTitle.asset"},
+                },
+            ]
+            _write_catalog(catalog_path, records)
+            observed_queries: list[str] = []
+
+            def fake_search_catalog(
+                catalog: Path,
+                query_text: str,
+                *,
+                preferred_kind: str | None = None,
+                region_type: str | None = None,
+                aspect_ratio: float | None = None,
+                vector_index_path: Path | None = None,
+                top_k: int = 5,
+            ) -> dict[str, object]:
+                observed_queries.append(query_text)
+                if preferred_kind == "prefab":
+                    return {"results": []}
+                if preferred_kind == "sprite" and region_type == "popup_frame":
+                    return {"results": [{"id": "hud-panel", "score": 0.63, "path": "Assets/UI/HudBar.png", "name": "HudBar", "assetType": "Sprite", "binding": {"kind": "sprite"}, "semanticText": "hud overlay top bar"}]}
+                if preferred_kind == "sprite" and region_type == "icon":
+                    return {"results": [{"id": "status-icon", "score": 0.57, "path": "Assets/UI/CoinIcon.png", "name": "CoinIcon", "assetType": "Sprite", "binding": {"kind": "sprite"}, "semanticText": "status currency icon"}]}
+                if preferred_kind == "tmp_font":
+                    return {"results": [{"id": "hud-title-font", "score": 0.37, "path": "Assets/UI/Fonts/HudTitle.asset", "name": "HudTitle", "assetType": "TMP_FontAsset", "binding": {"kind": "tmp_font"}, "semanticText": "hud font"}]}
+                raise AssertionError(f"Unexpected search query: {query_text}")
+
+            with mock.patch("pipeline.mcp.tools._search_catalog_records", side_effect=fake_search_catalog):
+                result = run_catalog_draft_ui_build(
+                    {
+                        "goal": "resource hud",
+                        "template_mode": "hud",
+                        "screen_name": "ResourceHudDraft",
+                        "title": "Night Shift HUD",
+                        "body": "Track health, coins, and active shift bonuses.",
+                        "price_text": "450",
+                        "primary_action_label": "BOOST",
+                        "secondary_action_label": "MAP",
+                        "unity_project_path": str(unity_project_path),
+                        "apply_in_unity": False,
+                    }
+                )
+
+            payload = _tool_payload(result)
+            self.assertEqual(payload["templateMode"], "hud")
+            self.assertEqual(payload["shellSourceMode"], "panel_sprite")
+            self.assertTrue(any("hud overlay top bar" in query for query in observed_queries))
+            self.assertTrue(any("readable hud label font" in query for query in observed_queries))
+            self.assertIn("HUD draft", " ".join(payload["nextActions"]))
+
+            blueprint_path = Path(payload["draftBlueprint"])
+            blueprint = json.loads(blueprint_path.read_text(encoding="utf-8"))
+            shell_node = blueprint["root"]["children"][0]["children"][0]
+            self.assertEqual(shell_node["rect"]["sizeDelta"]["x"], 1520)
+            self.assertEqual(shell_node["rect"]["anchoredPosition"]["y"], 382)
+            overlay_children = shell_node["children"][0]["children"]
+            self.assertIn("draft_status_value", {child["id"] for child in overlay_children})
+
+    def test_run_catalog_draft_ui_build_builds_list_template(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            unity_project_path = temp_path / "Project"
+            for dirname in ("Assets", "Packages", "ProjectSettings"):
+                (unity_project_path / dirname).mkdir(parents=True, exist_ok=True)
+
+            catalog_path = unity_project_path / "Library/ResourceRag/resource_catalog.jsonl"
+            records = [
+                {
+                    "id": "list-shell",
+                    "guid": "guid-list-shell",
+                    "path": "Assets/UI/PF_InventoryPanel.prefab",
+                    "assetType": "Prefab",
+                    "name": "PF_InventoryPanel",
+                    "semanticText": "inventory list shop panel shell",
+                    "binding": {"kind": "prefab", "unityLoadPath": "Assets/UI/PF_InventoryPanel.prefab"},
+                },
+                {
+                    "id": "list-icon",
+                    "guid": "guid-list-icon",
+                    "localFileId": 21300021,
+                    "path": "Assets/UI/ItemIcon.png",
+                    "subAssetName": "ItemIcon",
+                    "assetType": "Sprite",
+                    "name": "ItemIcon",
+                    "semanticText": "inventory item icon",
+                    "binding": {
+                        "kind": "sprite",
+                        "unityLoadPath": "Assets/UI/ItemIcon.png",
+                        "subAssetName": "ItemIcon",
+                        "localFileId": 21300021,
+                    },
+                },
+                {
+                    "id": "list-font",
+                    "guid": "guid-list-font",
+                    "path": "Assets/UI/Fonts/ListFont.asset",
+                    "assetType": "TMP_FontAsset",
+                    "name": "ListFont",
+                    "semanticText": "inventory list body font",
+                    "binding": {"kind": "tmp_font", "unityLoadPath": "Assets/UI/Fonts/ListFont.asset"},
+                },
+            ]
+            _write_catalog(catalog_path, records)
+            observed_queries: list[str] = []
+
+            def fake_search_catalog(
+                catalog: Path,
+                query_text: str,
+                *,
+                preferred_kind: str | None = None,
+                region_type: str | None = None,
+                aspect_ratio: float | None = None,
+                vector_index_path: Path | None = None,
+                top_k: int = 5,
+            ) -> dict[str, object]:
+                observed_queries.append(query_text)
+                if preferred_kind == "prefab":
+                    return {"results": [{"id": "list-shell", "score": 0.69, "path": "Assets/UI/PF_InventoryPanel.prefab", "name": "PF_InventoryPanel", "assetType": "Prefab", "binding": {"kind": "prefab"}, "semanticText": "inventory list panel shell"}]}
+                if preferred_kind == "sprite" and region_type == "popup_frame":
+                    return {"results": []}
+                if preferred_kind == "sprite" and region_type == "icon":
+                    return {"results": [{"id": "list-icon", "score": 0.59, "path": "Assets/UI/ItemIcon.png", "name": "ItemIcon", "assetType": "Sprite", "binding": {"kind": "sprite"}, "semanticText": "inventory item icon"}]}
+                if preferred_kind == "tmp_font":
+                    return {"results": [{"id": "list-font", "score": 0.29, "path": "Assets/UI/Fonts/ListFont.asset", "name": "ListFont", "assetType": "TMP_FontAsset", "binding": {"kind": "tmp_font"}, "semanticText": "inventory list font"}]}
+                raise AssertionError(f"Unexpected search query: {query_text}")
+
+            with mock.patch("pipeline.mcp.tools._search_catalog_records", side_effect=fake_search_catalog):
+                result = run_catalog_draft_ui_build(
+                    {
+                        "goal": "inventory list",
+                        "template_mode": "list",
+                        "screen_name": "InventoryDraft",
+                        "title": "Night Shift Inventory",
+                        "body": "Reusable list row body copy for the draft.",
+                        "secondary_action_label": "CLOSE",
+                        "unity_project_path": str(unity_project_path),
+                        "apply_in_unity": False,
+                    }
+                )
+
+            payload = _tool_payload(result)
+            self.assertEqual(payload["templateMode"], "list")
+            self.assertEqual(payload["shellSourceMode"], "shell_prefab")
+            self.assertTrue(any("inventory shop list panel window shell" in query for query in observed_queries))
+            self.assertIn("3개 샘플 row", " ".join(payload["nextActions"]))
+
+            blueprint_path = Path(payload["draftBlueprint"])
+            blueprint = json.loads(blueprint_path.read_text(encoding="utf-8"))
+            shell_node = blueprint["root"]["children"][0]["children"][0]
+            self.assertEqual(shell_node["kind"], "prefab_instance")
+            overlay_children = shell_node["children"][0]["children"]
+            row_ids = {child["id"] for child in overlay_children}
+            self.assertIn("draft_list_row_1", row_ids)
+            self.assertIn("draft_list_row_2", row_ids)
+            self.assertIn("draft_list_row_3", row_ids)
 
     def test_run_catalog_draft_ui_build_requires_catalog_or_project(self) -> None:
         with self.assertRaisesRegex(Exception, "catalog"):

@@ -72,6 +72,7 @@ CONNECTION_PRESET_DESCRIPTION = (
 )
 
 PROVIDER_ENUM = ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "gateway", "local_heuristic"]
+DRAFT_TEMPLATE_MODE_ENUM = ["popup", "hud", "list"]
 CONNECTION_PRESET_ENUM = [
     "recommended_auto",
     "codex_oauth",
@@ -391,6 +392,7 @@ def _build_run_catalog_draft_ui_build_schema() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "goal": {"type": "string", "description": "만들고 싶은 UI draft 설명. catalog search와 기본 본문 문구에 함께 사용한다."},
+            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "catalog-first draft 템플릿 선택. `popup`, `hud`, `list` 중 하나."},
             "screen_name": {"type": "string", "description": "출력 blueprint와 Canvas 이름에 사용할 screen name. 생략 시 CatalogDraft를 쓴다."},
             "title": {"type": "string", "description": "헤더 텍스트. 생략 시 goal을 그대로 title에 쓴다."},
             "subtitle": {"type": "string", "description": "선택적 서브타이틀."},
@@ -425,6 +427,7 @@ def _build_start_ui_build_schema() -> dict[str, Any]:
             "image": {"type": "string", "description": "Path to the reference image. 있으면 reference-first path를 우선 선택한다."},
             "reference_layout": {"type": "string", "description": "Existing reference layout JSON. image 없이도 reference-first path를 강제할 수 있다."},
             "goal": {"type": "string", "description": "reference가 없을 때 catalog-first draft에 쓸 UI goal 설명."},
+            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "reference가 없을 때 catalog-first draft 템플릿 선택."},
             "screen_name": {"type": "string"},
             "title": {"type": "string"},
             "subtitle": {"type": "string"},
@@ -800,15 +803,17 @@ def _make_tmp_text_node(
     value: str,
     width: float,
     height: float,
+    x: float = 0,
     y: float,
     font_size: int,
     color: str,
     font_asset: dict[str, Any] | None,
+    alignment: str = "Center",
 ) -> dict[str, Any]:
     text_spec: dict[str, Any] = {
         "value": value,
         "fontSize": font_size,
-        "alignment": "Center",
+        "alignment": alignment,
         "enableAutoSizing": False,
         "raycastTarget": False,
         "color": color,
@@ -820,26 +825,151 @@ def _make_tmp_text_node(
         "name": name,
         "kind": "tmp_text",
         "text": text_spec,
-        "rect": _center_rect(width, height, y=y),
+        "rect": _center_rect(width, height, x=x, y=y),
     }
 
 
-def _build_catalog_draft_blueprint(
+def _normalize_draft_template_mode(value: Any) -> str:
+    normalized = str(value or "popup").strip().lower() or "popup"
+    if normalized not in DRAFT_TEMPLATE_MODE_ENUM:
+        raise ToolExecutionError(
+            f"Unsupported template_mode: {value}.",
+            details={"allowedTemplateModes": DRAFT_TEMPLATE_MODE_ENUM},
+        )
+    return normalized
+
+
+def _catalog_draft_query_defaults(template_mode: str, goal: str) -> dict[str, str]:
+    if template_mode == "hud":
+        return {
+            "shell": f"{goal} hud overlay top bar heads up display shell",
+            "panel": f"{goal} hud bar overlay panel background",
+            "featured": f"{goal} status resource icon badge",
+            "title_font": f"{goal} hud title heading font",
+            "body_font": f"{goal} readable hud label font",
+        }
+    if template_mode == "list":
+        return {
+            "shell": f"{goal} inventory shop list panel window shell",
+            "panel": f"{goal} inventory list card row panel background",
+            "featured": f"{goal} inventory item icon",
+            "title_font": f"{goal} inventory list title font",
+            "body_font": f"{goal} readable inventory list body font",
+        }
+    return {
+        "shell": f"{goal} popup modal dialog window shell",
+        "panel": f"{goal} popup panel frame background",
+        "featured": f"{goal} reward item icon",
+        "title_font": f"{goal} ui title heading font",
+        "body_font": f"{goal} readable ui body font",
+    }
+
+
+def _catalog_draft_semantic_terms(template_mode: str) -> dict[str, tuple[str, ...]]:
+    if template_mode == "hud":
+        return {
+            "shell": ("hud", "overlay", "bar", "status", "top"),
+            "panel": ("hud", "overlay", "bar", "panel", "status"),
+            "featured": ("icon", "status", "resource", "currency", "badge"),
+        }
+    if template_mode == "list":
+        return {
+            "shell": ("list", "inventory", "shop", "panel", "window"),
+            "panel": ("list", "inventory", "card", "row", "panel"),
+            "featured": ("icon", "item", "inventory", "reward", "shop"),
+        }
+    return {
+        "shell": ("popup", "panel", "dialog", "window", "modal"),
+        "panel": ("popup", "panel", "frame", "window", "modal"),
+        "featured": ("icon", "reward", "badge", "item"),
+    }
+
+
+def _make_draft_image_node(
     *,
-    screen_name: str,
+    node_id: str,
+    name: str,
+    asset: dict[str, Any],
+    width: float,
+    height: float,
+    x: float = 0,
+    y: float = 0,
+    preserve_aspect: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "name": name,
+        "kind": "image",
+        "asset": asset,
+        "image": {
+            "type": "Simple",
+            "preserveAspect": preserve_aspect,
+            "raycastTarget": False,
+            "color": "#FFFFFFFF",
+        },
+        "rect": _center_rect(width, height, x=x, y=y),
+    }
+
+
+def _wrap_catalog_draft_shell(
+    *,
+    overlay_root: dict[str, Any],
+    shell_prefab_asset: dict[str, Any] | None,
+    panel_sprite_asset: dict[str, Any] | None,
+    panel_is_nine_slice: bool,
+    width: float,
+    height: float,
+    y: float = 0,
+) -> tuple[dict[str, Any], str]:
+    shell_source_mode = "bare_container"
+    if shell_prefab_asset:
+        shell_source_mode = "shell_prefab"
+        shell_node: dict[str, Any] = {
+            "id": "draft_shell_prefab",
+            "name": "DraftShellPrefab",
+            "kind": "prefab_instance",
+            "asset": shell_prefab_asset,
+            "children": [overlay_root],
+        }
+    elif panel_sprite_asset:
+        shell_source_mode = "panel_sprite"
+        shell_node = {
+            "id": "draft_panel_sprite",
+            "name": "DraftPanelSprite",
+            "kind": "image",
+            "asset": panel_sprite_asset,
+            "image": {
+                "type": "Sliced" if panel_is_nine_slice else "Simple",
+                "preserveAspect": False,
+                "raycastTarget": False,
+                "color": "#FFFFFFFF",
+            },
+            "rect": _center_rect(width, height, y=y),
+            "children": [overlay_root],
+        }
+    else:
+        shell_node = {
+            "id": "draft_panel_container",
+            "name": "DraftPanelContainer",
+            "kind": "container",
+            "rect": _center_rect(width, height, y=y),
+            "children": [overlay_root],
+        }
+    return shell_node, shell_source_mode
+
+
+def _build_popup_catalog_draft_blueprint(
+    *,
     title: str,
     subtitle: str | None,
     body: str,
     price_text: str | None,
     primary_action_label: str | None,
     secondary_action_label: str | None,
-    shell_prefab_asset: dict[str, Any] | None,
-    panel_sprite_asset: dict[str, Any] | None,
-    panel_is_nine_slice: bool,
     featured_sprite_asset: dict[str, Any] | None,
     title_font_asset: dict[str, Any] | None,
     body_font_asset: dict[str, Any] | None,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[list[dict[str, Any]], float, float, float]:
     overlay_children: list[dict[str, Any]] = [
         _make_tmp_text_node(
             node_id="draft_title",
@@ -872,19 +1002,14 @@ def _build_catalog_draft_blueprint(
     body_y = -24
     if featured_sprite_asset:
         overlay_children.append(
-            {
-                "id": "draft_featured_icon",
-                "name": "DraftFeaturedIcon",
-                "kind": "image",
-                "asset": featured_sprite_asset,
-                "image": {
-                    "type": "Simple",
-                    "preserveAspect": True,
-                    "raycastTarget": False,
-                    "color": "#FFFFFFFF",
-                },
-                "rect": _center_rect(148, 148, y=88),
-            }
+            _make_draft_image_node(
+                node_id="draft_featured_icon",
+                name="DraftFeaturedIcon",
+                asset=featured_sprite_asset,
+                width=148,
+                height=148,
+                y=88,
+            )
         )
         body_y = -102
 
@@ -940,13 +1065,13 @@ def _build_catalog_draft_blueprint(
                 value=primary_action_label,
                 width=220,
                 height=36,
+                x=-110,
                 y=button_y,
                 font_size=24,
                 color="#FFFFFFFF",
                 font_asset=title_font_asset or body_font_asset,
             )
         )
-        overlay_children[-1]["rect"]["anchoredPosition"]["x"] = -110
     if secondary_action_label:
         overlay_children.append(
             _make_tmp_text_node(
@@ -955,13 +1080,343 @@ def _build_catalog_draft_blueprint(
                 value=secondary_action_label,
                 width=220,
                 height=36,
+                x=110,
                 y=button_y,
                 font_size=24,
                 color="#FFFFFFFF",
                 font_asset=title_font_asset or body_font_asset,
             )
         )
-        overlay_children[-1]["rect"]["anchoredPosition"]["x"] = 110
+    return overlay_children, 920, 640, 0
+
+
+def _build_hud_catalog_draft_blueprint(
+    *,
+    title: str,
+    subtitle: str | None,
+    body: str,
+    price_text: str | None,
+    primary_action_label: str | None,
+    secondary_action_label: str | None,
+    featured_sprite_asset: dict[str, Any] | None,
+    title_font_asset: dict[str, Any] | None,
+    body_font_asset: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], float, float, float]:
+    overlay_children: list[dict[str, Any]] = [
+        _make_tmp_text_node(
+            node_id="draft_title",
+            name="DraftTitle",
+            value=title,
+            width=520,
+            height=48,
+            x=-420,
+            y=28,
+            font_size=34,
+            color="#F7E9AEFF",
+            font_asset=title_font_asset,
+            alignment="Left",
+        ),
+        _make_tmp_text_node(
+            node_id="draft_body",
+            name="DraftBody",
+            value=body,
+            width=620,
+            height=32,
+            x=-370,
+            y=-24,
+            font_size=20,
+            color="#DCE4EAFF",
+            font_asset=body_font_asset,
+            alignment="Left",
+        ),
+    ]
+
+    if subtitle:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_subtitle",
+                name="DraftSubtitle",
+                value=subtitle,
+                width=520,
+                height=24,
+                x=-420,
+                y=2,
+                font_size=18,
+                color="#9FB2C1FF",
+                font_asset=body_font_asset,
+                alignment="Left",
+            )
+        )
+
+    if featured_sprite_asset:
+        overlay_children.append(
+            _make_draft_image_node(
+                node_id="draft_featured_icon",
+                name="DraftFeaturedIcon",
+                asset=featured_sprite_asset,
+                width=96,
+                height=96,
+                x=548,
+                y=0,
+            )
+        )
+
+    if price_text:
+        overlay_children.extend(
+            [
+                _make_tmp_text_node(
+                    node_id="draft_status_caption",
+                    name="DraftStatusCaption",
+                    value="STATUS",
+                    width=180,
+                    height=20,
+                    x=228,
+                    y=24,
+                    font_size=16,
+                    color="#9FB2C1FF",
+                    font_asset=body_font_asset,
+                    alignment="Right",
+                ),
+                _make_tmp_text_node(
+                    node_id="draft_status_value",
+                    name="DraftStatusValue",
+                    value=price_text,
+                    width=220,
+                    height=32,
+                    x=208,
+                    y=-10,
+                    font_size=28,
+                    color="#8CE0A7FF",
+                    font_asset=title_font_asset or body_font_asset,
+                    alignment="Right",
+                ),
+            ]
+        )
+
+    if primary_action_label:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_primary_action",
+                name="DraftPrimaryActionLabel",
+                value=primary_action_label,
+                width=160,
+                height=24,
+                x=410,
+                y=-48,
+                font_size=18,
+                color="#FFFFFFFF",
+                font_asset=title_font_asset or body_font_asset,
+                alignment="Center",
+            )
+        )
+    if secondary_action_label:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_secondary_action",
+                name="DraftSecondaryActionLabel",
+                value=secondary_action_label,
+                width=160,
+                height=24,
+                x=566,
+                y=-48,
+                font_size=18,
+                color="#FFFFFFFF",
+                font_asset=title_font_asset or body_font_asset,
+                alignment="Center",
+            )
+        )
+    return overlay_children, 1520, 188, 382
+
+
+def _build_list_catalog_draft_blueprint(
+    *,
+    title: str,
+    subtitle: str | None,
+    body: str,
+    price_text: str | None,
+    primary_action_label: str | None,
+    secondary_action_label: str | None,
+    featured_sprite_asset: dict[str, Any] | None,
+    title_font_asset: dict[str, Any] | None,
+    body_font_asset: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], float, float, float]:
+    overlay_children: list[dict[str, Any]] = [
+        _make_tmp_text_node(
+            node_id="draft_title",
+            name="DraftTitle",
+            value=title,
+            width=760,
+            height=52,
+            x=-82,
+            y=292,
+            font_size=38,
+            color="#F7E9AEFF",
+            font_asset=title_font_asset,
+            alignment="Left",
+        ),
+    ]
+
+    if subtitle:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_subtitle",
+                name="DraftSubtitle",
+                value=subtitle,
+                width=760,
+                height=24,
+                x=-82,
+                y=254,
+                font_size=18,
+                color="#9FB2C1FF",
+                font_asset=body_font_asset,
+                alignment="Left",
+            )
+        )
+
+    row_body_value = body if len(body) <= 72 else body[:69] + "..."
+    row_action_value = price_text or primary_action_label or "OPEN"
+    row_icon_asset = featured_sprite_asset
+    row_names = [title, f"{title} Pack", f"{title} Bonus"]
+    row_ys = [126, -24, -174]
+    for index, row_y in enumerate(row_ys, start=1):
+        overlay_children.append(
+            {
+                "id": f"draft_list_row_{index}",
+                "name": f"DraftListRow{index}",
+                "kind": "container",
+                "rect": _center_rect(920, 124, y=row_y),
+                "children": [
+                    *(
+                        [
+                            _make_draft_image_node(
+                                node_id=f"draft_list_row_{index}_icon",
+                                name=f"DraftListRow{index}Icon",
+                                asset=row_icon_asset,
+                                width=76,
+                                height=76,
+                                x=-382,
+                                y=0,
+                            )
+                        ]
+                        if row_icon_asset
+                        else []
+                    ),
+                    _make_tmp_text_node(
+                        node_id=f"draft_list_row_{index}_title",
+                        name=f"DraftListRow{index}Title",
+                        value=row_names[index - 1],
+                        width=420,
+                        height=32,
+                        x=-118,
+                        y=20,
+                        font_size=24,
+                        color="#FFFFFFFF",
+                        font_asset=title_font_asset or body_font_asset,
+                        alignment="Left",
+                    ),
+                    _make_tmp_text_node(
+                        node_id=f"draft_list_row_{index}_body",
+                        name=f"DraftListRow{index}Body",
+                        value=row_body_value,
+                        width=440,
+                        height=24,
+                        x=-108,
+                        y=-16,
+                        font_size=18,
+                        color="#C9D3DAFF",
+                        font_asset=body_font_asset,
+                        alignment="Left",
+                    ),
+                    _make_tmp_text_node(
+                        node_id=f"draft_list_row_{index}_action",
+                        name=f"DraftListRow{index}Action",
+                        value=row_action_value,
+                        width=176,
+                        height=28,
+                        x=316,
+                        y=0,
+                        font_size=20,
+                        color="#8CE0A7FF" if price_text else "#FFFFFFFF",
+                        font_asset=title_font_asset or body_font_asset,
+                        alignment="Right",
+                    ),
+                ],
+            }
+        )
+
+    footer_value = secondary_action_label or primary_action_label
+    if footer_value:
+        overlay_children.append(
+            _make_tmp_text_node(
+                node_id="draft_footer_action",
+                name="DraftFooterAction",
+                value=footer_value,
+                width=280,
+                height=28,
+                x=312,
+                y=-314,
+                font_size=20,
+                color="#FFFFFFFF",
+                font_asset=title_font_asset or body_font_asset,
+                alignment="Right",
+            )
+        )
+    return overlay_children, 1120, 780, 0
+
+
+def _build_catalog_draft_blueprint(
+    *,
+    template_mode: str,
+    screen_name: str,
+    title: str,
+    subtitle: str | None,
+    body: str,
+    price_text: str | None,
+    primary_action_label: str | None,
+    secondary_action_label: str | None,
+    shell_prefab_asset: dict[str, Any] | None,
+    panel_sprite_asset: dict[str, Any] | None,
+    panel_is_nine_slice: bool,
+    featured_sprite_asset: dict[str, Any] | None,
+    title_font_asset: dict[str, Any] | None,
+    body_font_asset: dict[str, Any] | None,
+) -> tuple[dict[str, Any], str]:
+    if template_mode == "hud":
+        overlay_children, shell_width, shell_height, shell_y = _build_hud_catalog_draft_blueprint(
+            title=title,
+            subtitle=subtitle,
+            body=body,
+            price_text=price_text,
+            primary_action_label=primary_action_label,
+            secondary_action_label=secondary_action_label,
+            featured_sprite_asset=featured_sprite_asset,
+            title_font_asset=title_font_asset,
+            body_font_asset=body_font_asset,
+        )
+    elif template_mode == "list":
+        overlay_children, shell_width, shell_height, shell_y = _build_list_catalog_draft_blueprint(
+            title=title,
+            subtitle=subtitle,
+            body=body,
+            price_text=price_text,
+            primary_action_label=primary_action_label,
+            secondary_action_label=secondary_action_label,
+            featured_sprite_asset=featured_sprite_asset,
+            title_font_asset=title_font_asset,
+            body_font_asset=body_font_asset,
+        )
+    else:
+        overlay_children, shell_width, shell_height, shell_y = _build_popup_catalog_draft_blueprint(
+            title=title,
+            subtitle=subtitle,
+            body=body,
+            price_text=price_text,
+            primary_action_label=primary_action_label,
+            secondary_action_label=secondary_action_label,
+            featured_sprite_asset=featured_sprite_asset,
+            title_font_asset=title_font_asset,
+            body_font_asset=body_font_asset,
+        )
 
     overlay_root = {
         "id": "draft_overlay_root",
@@ -971,40 +1426,15 @@ def _build_catalog_draft_blueprint(
         "children": overlay_children,
     }
 
-    draft_mode = "bare_container"
-    if shell_prefab_asset:
-        draft_mode = "shell_prefab"
-        shell_node: dict[str, Any] = {
-            "id": "draft_shell_prefab",
-            "name": "DraftShellPrefab",
-            "kind": "prefab_instance",
-            "asset": shell_prefab_asset,
-            "children": [overlay_root],
-        }
-    elif panel_sprite_asset:
-        draft_mode = "panel_sprite"
-        shell_node = {
-            "id": "draft_panel_sprite",
-            "name": "DraftPanelSprite",
-            "kind": "image",
-            "asset": panel_sprite_asset,
-            "image": {
-                "type": "Sliced" if panel_is_nine_slice else "Simple",
-                "preserveAspect": False,
-                "raycastTarget": False,
-                "color": "#FFFFFFFF",
-            },
-            "rect": _center_rect(920, 640),
-            "children": [overlay_root],
-        }
-    else:
-        shell_node = {
-            "id": "draft_panel_container",
-            "name": "DraftPanelContainer",
-            "kind": "container",
-            "rect": _center_rect(920, 640),
-            "children": [overlay_root],
-        }
+    shell_node, shell_source_mode = _wrap_catalog_draft_shell(
+        overlay_root=overlay_root,
+        shell_prefab_asset=shell_prefab_asset,
+        panel_sprite_asset=panel_sprite_asset,
+        panel_is_nine_slice=panel_is_nine_slice,
+        width=shell_width,
+        height=shell_height,
+        y=shell_y,
+    )
 
     blueprint = {
         "screenName": screen_name,
@@ -1030,7 +1460,7 @@ def _build_catalog_draft_blueprint(
             ],
         },
     }
-    return blueprint, draft_mode
+    return blueprint, shell_source_mode
 
 
 def _http_json_request(url: str, method: str, params: dict[str, Any] | None, timeout_ms: int, request_id: int) -> dict[str, Any]:
@@ -1375,6 +1805,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     if not goal:
         raise ToolExecutionError("`goal` is required.")
 
+    template_mode = _normalize_draft_template_mode(args.get("template_mode"))
     screen_name = str(args.get("screen_name") or "CatalogDraft").strip() or "CatalogDraft"
     title = str(args.get("title") or goal).strip() or screen_name
     body = str(args.get("body") or goal).strip() or goal
@@ -1428,10 +1859,12 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         for record in records
         if isinstance(record, dict) and record.get("id")
     }
+    query_defaults = _catalog_draft_query_defaults(template_mode, goal)
+    semantic_terms = _catalog_draft_semantic_terms(template_mode)
 
     shell_search = _search_catalog_records(
         catalog_path,
-        str(args.get("shell_query") or f"{goal} popup modal dialog window shell"),
+        str(args.get("shell_query") or query_defaults["shell"]),
         preferred_kind="prefab",
         region_type="popup_frame",
         vector_index_path=vector_index_path,
@@ -1439,7 +1872,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     )
     panel_search = _search_catalog_records(
         catalog_path,
-        str(args.get("panel_query") or f"{goal} popup panel frame background"),
+        str(args.get("panel_query") or query_defaults["panel"]),
         preferred_kind="sprite",
         region_type="popup_frame",
         aspect_ratio=920.0 / 640.0,
@@ -1448,7 +1881,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     )
     icon_search = _search_catalog_records(
         catalog_path,
-        str(args.get("featured_asset_query") or f"{goal} reward item icon"),
+        str(args.get("featured_asset_query") or query_defaults["featured"]),
         preferred_kind="sprite",
         region_type="icon",
         aspect_ratio=1.0,
@@ -1457,14 +1890,14 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     )
     title_font_search = _search_catalog_records(
         catalog_path,
-        str(args.get("title_font_query") or f"{goal} ui title heading font"),
+        str(args.get("title_font_query") or query_defaults["title_font"]),
         preferred_kind="tmp_font",
         vector_index_path=vector_index_path,
         top_k=5,
     )
     body_font_search = _search_catalog_records(
         catalog_path,
-        str(args.get("body_font_query") or f"{goal} readable ui body font"),
+        str(args.get("body_font_query") or query_defaults["body_font"]),
         preferred_kind="tmp_font",
         vector_index_path=vector_index_path,
         top_k=5,
@@ -1475,7 +1908,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         records_by_id,
         asset_types=("prefab",),
         binding_kinds=("prefab",),
-        semantic_terms=("popup", "panel", "dialog", "window", "modal"),
+        semantic_terms=semantic_terms["shell"],
         min_score=0.34,
     )
     panel_candidate, panel_record = _select_catalog_candidate(
@@ -1483,7 +1916,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         records_by_id,
         asset_types=("sprite", "texture2d"),
         binding_kinds=("sprite",),
-        semantic_terms=("popup", "panel", "frame", "window", "modal"),
+        semantic_terms=semantic_terms["panel"],
         min_score=0.34,
     )
     icon_candidate, icon_record = _select_catalog_candidate(
@@ -1491,7 +1924,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         records_by_id,
         asset_types=("sprite", "texture2d"),
         binding_kinds=("sprite",),
-        semantic_terms=("icon", "reward", "badge", "item"),
+        semantic_terms=semantic_terms["featured"],
         min_score=0.30,
     )
 
@@ -1525,7 +1958,8 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
     panel_is_nine_slice = bool(((panel_record or {}).get("uiHints") or {}).get("isNineSliceCandidate"))
 
-    blueprint, draft_mode = _build_catalog_draft_blueprint(
+    blueprint, shell_source_mode = _build_catalog_draft_blueprint(
+        template_mode=template_mode,
         screen_name=screen_name,
         title=title,
         subtitle=subtitle,
@@ -1549,6 +1983,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         {
             "screenName": screen_name,
             "goal": goal,
+            "templateMode": template_mode,
             "catalogPath": str(catalog_path),
             "vectorIndex": str(vector_index_path) if vector_index_path else None,
             "selectedAssets": {
@@ -1602,17 +2037,26 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         "draft가 뜨면 제목/본문/가격 문구와 spacing을 먼저 조정합니다.",
         "결과가 다르면 `manage_camera` screenshot으로 캡처한 뒤 `unity_rag.run_verification_repair_loop`로 repair handoff를 만듭니다.",
     ]
-    if draft_mode == "bare_container":
-        next_actions.insert(0, "popup shell 후보를 못 찾아 bare container로 생성했습니다. `shell_query`를 더 구체적으로 주거나 대표 popup prefab 경로를 확인해 보세요.")
-    elif draft_mode == "panel_sprite":
-        next_actions.insert(0, "prefab shell 대신 panel sprite 기반 draft를 만들었습니다. 버튼/닫기 affordance는 수동 보강이 필요할 수 있습니다.")
+    if template_mode == "hud":
+        next_actions.insert(0, "HUD draft는 상단 bar / 상태 정보 배치 중심으로 만들어집니다. 실제 게임 리듬에 맞게 폭과 아이콘 밀도를 먼저 조정하세요.")
+    elif template_mode == "list":
+        next_actions.insert(0, "List draft는 3개 샘플 row를 생성합니다. 실제 inventory나 shop flow에 맞게 row 수와 action 문구를 조정하세요.")
+    else:
+        next_actions.insert(0, "Popup draft는 modal/panel 중심 초안입니다. 제목-본문-액션 hierarchy가 먼저 맞는지 확인하세요.")
+
+    if shell_source_mode == "bare_container":
+        next_actions.insert(1, f"{template_mode} shell 후보를 못 찾아 bare container로 생성했습니다. `shell_query`를 더 구체적으로 주거나 대표 {template_mode} prefab 경로를 확인해 보세요.")
+    elif shell_source_mode == "panel_sprite":
+        next_actions.insert(1, "prefab shell 대신 panel sprite 기반 draft를 만들었습니다. affordance나 버튼 배치는 수동 보강이 필요할 수 있습니다.")
 
     payload = {
         "unityProjectPath": str(unity_project_path) if unity_project_path else None,
         "catalogPath": str(catalog_path),
         "catalogIndexed": index_result is not None,
         "outputDir": str(output_dir),
-        "draftMode": draft_mode,
+        "templateMode": template_mode,
+        "draftMode": shell_source_mode,
+        "shellSourceMode": shell_source_mode,
         "draftBlueprint": str(blueprint_path),
         "searchReport": str(search_report_path),
         "handoffBundlePath": str(handoff_bundle_path) if handoff_bundle_path else None,
@@ -1636,6 +2080,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
 def start_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     args = _apply_connection_preset(args)
+    template_mode = _normalize_draft_template_mode(args.get("template_mode"))
 
     run_doctor = bool(args.get("run_doctor", True))
     require_doctor_ok = bool(args.get("require_doctor_ok", True))
@@ -1651,7 +2096,7 @@ def start_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     route_reason = (
         "reference input (`image` or `reference_layout`) was provided."
         if has_reference_input
-        else "no reference input was provided, so the catalog-first draft path was selected."
+        else f"no reference input was provided, so the catalog-first draft path was selected with template_mode `{template_mode}`."
     )
 
     route_args = dict(args)

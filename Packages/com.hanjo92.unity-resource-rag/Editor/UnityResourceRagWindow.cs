@@ -220,6 +220,23 @@ namespace UnityResourceRag.Editor
                 "If a reference image is provided, the window runs the reference-first build path. If it is empty, it falls back to the catalog-first draft path. The window rechecks readiness before the build and continues to Unity apply on success.",
                 MessageType.None);
 
+            bool hasReferenceImage = !string.IsNullOrWhiteSpace(settings.ReferenceImagePath);
+            if (!hasReferenceImage)
+            {
+                settings.DraftTemplateMode = (UnityResourceRagDraftTemplateMode)EditorGUILayout.EnumPopup("Draft Template", settings.DraftTemplateMode);
+                EditorGUILayout.HelpBox(GetDraftTemplateHelpText(settings.DraftTemplateMode), MessageType.None);
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Use Suggested Copy", GUILayout.Width(180f)))
+                    {
+                        settings.ApplyDraftTemplateDefaults();
+                    }
+
+                    GUILayout.FlexibleSpace();
+                }
+            }
+
             settings.Goal = EditorGUILayout.TextField("Goal", settings.Goal);
             settings.ScreenName = EditorGUILayout.TextField("Screen Name", settings.ScreenName);
             settings.Title = EditorGUILayout.TextField("Title", settings.Title);
@@ -515,7 +532,9 @@ namespace UnityResourceRag.Editor
                 return;
             }
 
-            string routeLabel = string.IsNullOrWhiteSpace(settings.ReferenceImagePath) ? "catalog-first draft" : "reference-first build";
+            string routeLabel = string.IsNullOrWhiteSpace(settings.ReferenceImagePath)
+                ? $"{settings.DraftTemplateMode} catalog-first draft"
+                : "reference-first build";
             _buildPhase = $"2/2 Running {routeLabel} and Unity apply...";
             _buildReport = "Running blueprint generation and Unity apply.";
             Repaint();
@@ -725,6 +744,19 @@ namespace UnityResourceRag.Editor
             }
 
             return "ResourceRagCase";
+        }
+
+        private static string GetDraftTemplateHelpText(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "HUD / Top Bar is best for resource bars, status overlays, and compact always-on screen chrome. The generated draft prioritizes a wide top-aligned shell with status text and icon slots.";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "List / Inventory is best for shop rows, inventory panels, and mission cards. The generated draft creates a reusable panel shell with three example rows so you can reshape it into your real list quickly.";
+                default:
+                    return "Popup / Modal is best for reward popups, confirm dialogs, and focused modal windows. The generated draft prioritizes a centered panel with title, body, highlight icon, and action labels.";
+            }
         }
 
         private static void DrawPathField(string label, string value, string buttonLabel, System.Action onBrowse)

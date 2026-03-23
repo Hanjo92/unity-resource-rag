@@ -436,6 +436,7 @@ namespace UnityResourceRag.Editor
             bool hasReference = !string.IsNullOrWhiteSpace(settings.ReferenceImagePath) && File.Exists(settings.ReferenceImagePath);
             bool hasDraftInput = !string.IsNullOrWhiteSpace(settings.Goal) || !string.IsNullOrWhiteSpace(settings.Title) || !string.IsNullOrWhiteSpace(settings.Body);
             bool catalogReady = string.Equals(catalogCheck?.Value<string>("status"), "ok", StringComparison.OrdinalIgnoreCase);
+            string templateLabel = DescribeDraftTemplate(settings.DraftTemplateMode);
 
             if (hasReference)
             {
@@ -457,9 +458,9 @@ namespace UnityResourceRag.Editor
                     Title = "Build Input",
                     Level = UnityResourceRagReadinessLevel.Ready,
                     Summary = catalogReady
-                        ? "The inputs required for a catalog-first draft are ready."
-                        : "Goal, title, and body are ready. The first build will create the catalog if it does not exist yet.",
-                    NextStep = string.IsNullOrWhiteSpace(settings.Goal) ? settings.Title : settings.Goal,
+                        ? $"The inputs required for a {templateLabel.ToLowerInvariant()} catalog-first draft are ready."
+                        : $"Goal, title, and body are ready for a {templateLabel.ToLowerInvariant()} draft. The first build will create the catalog if it does not exist yet.",
+                    NextStep = $"{templateLabel}: " + (string.IsNullOrWhiteSpace(settings.Goal) ? settings.Title : settings.Goal),
                 };
             }
 
@@ -484,12 +485,17 @@ namespace UnityResourceRag.Editor
             string blueprintPath = ExtractBlueprintPath(payload);
             string handoffPath = ExtractHandoffPath(payload);
             string applySummary = BuildApplySummary(payload.SelectToken("execution.unityApply") as JObject);
+            string templateMode = payload.SelectToken("execution.templateMode")?.ToString() ?? string.Empty;
 
             var lines = new List<string>
             {
                 "UI build completed.",
                 $"Flow: {routeLabel}",
             };
+            if (!string.IsNullOrWhiteSpace(templateMode) && string.Equals(routeLabel, "Catalog-first draft", StringComparison.OrdinalIgnoreCase))
+            {
+                lines.Add($"Draft Template: {DescribeTemplateMode(templateMode)}");
+            }
 
             AppendIfPresent(lines, "Blueprint", blueprintPath);
             AppendIfPresent(lines, "Handoff", handoffPath);
@@ -579,6 +585,32 @@ namespace UnityResourceRag.Editor
             }
 
             return null;
+        }
+
+        private static string DescribeDraftTemplate(UnityResourceRagDraftTemplateMode mode)
+        {
+            switch (mode)
+            {
+                case UnityResourceRagDraftTemplateMode.Hud:
+                    return "HUD / Top Bar";
+                case UnityResourceRagDraftTemplateMode.List:
+                    return "List / Inventory";
+                default:
+                    return "Popup / Modal";
+            }
+        }
+
+        private static string DescribeTemplateMode(string mode)
+        {
+            switch ((mode ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "hud":
+                    return "HUD / Top Bar";
+                case "list":
+                    return "List / Inventory";
+                default:
+                    return "Popup / Modal";
+            }
         }
 
         private static List<string> CollectDoctorWarnings(JArray checks)

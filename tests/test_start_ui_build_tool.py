@@ -79,6 +79,7 @@ class StartUiBuildToolTests(unittest.TestCase):
             "checks": [],
         }
         catalog_payload = {
+            "templateMode": "list",
             "draftMode": "panel_sprite",
             "draftBlueprint": "/tmp/01-catalog-draft-blueprint.json",
             "nextActions": ["draft action"],
@@ -93,6 +94,7 @@ class StartUiBuildToolTests(unittest.TestCase):
                     result = start_ui_build(
                         {
                             "title": "Night Shift Shop",
+                            "template_mode": "list",
                             "screen_name": "ShopPopupDraft",
                             "unity_project_path": "/tmp/Project",
                         }
@@ -100,11 +102,14 @@ class StartUiBuildToolTests(unittest.TestCase):
 
         payload = _tool_payload(result)
         self.assertEqual(payload["selectedPath"], "catalog_draft")
+        self.assertEqual(payload["execution"]["templateMode"], "list")
         self.assertEqual(payload["execution"]["draftMode"], "panel_sprite")
         self.assertEqual(payload["nextActions"], ["draft action"])
+        self.assertIn("template_mode `list`", payload["routeReason"])
         first_pass_mock.assert_not_called()
         called_args = catalog_mock.call_args.args[0]
         self.assertEqual(called_args["goal"], "Night Shift Shop")
+        self.assertEqual(called_args["template_mode"], "list")
 
     def test_start_ui_build_stops_when_doctor_reports_error(self) -> None:
         doctor_payload = {

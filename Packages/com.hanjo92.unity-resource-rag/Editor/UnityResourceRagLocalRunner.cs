@@ -139,6 +139,7 @@ namespace UnityResourceRag.Editor
             else
             {
                 payload["goal"] = settings.Goal;
+                payload["template_mode"] = settings.EffectiveTemplateMode;
                 payload["screen_name"] = settings.ScreenName;
                 payload["title"] = settings.Title;
                 payload["body"] = settings.Body;

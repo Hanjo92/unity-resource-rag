@@ -113,7 +113,7 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 2. sign-in method는 기본적으로 `Use my Codex sign-in (Recommended)`로 두고, 필요할 때만 API key environment mode나 offline mode로 바꾼다.
 3. 같은 창의 Readiness Dashboard에서 `Refresh Readiness`를 눌러 현재 상태를 확인한다.
 4. Python runtime이 막혀 있으면 `Bootstrap Python Runtime`을 먼저 실행한다.
-5. reference 이미지를 넣거나, 비워둔 채 goal/title/body만 채운 뒤 `Start UI Build`를 누른다.
+5. reference 이미지를 넣거나, 비워둔 채 `Draft Template`을 `Popup / HUD / List` 중 하나로 고른 뒤 goal/title/body를 채우고 `Start UI Build`를 누른다.
 6. 이 버튼은 내부적으로 readiness를 다시 확인한 뒤 `unity_rag.start_ui_build`를 호출하고, reference가 있으면 `run_first_pass_ui_build`, 없으면 `run_catalog_draft_ui_build`를 자동 선택한다.
 7. build가 끝나면 같은 창에서 `Capture Result`로 현재 Unity 결과를 캡처한다.
 8. reference build였다면 `Run Repair Handoff`로 mismatch report와 repair bundle을 만든다.
@@ -213,6 +213,7 @@ reference 없이 catalog 기반 draft부터 시작하고 싶을 때도 같은 to
   "tool": "unity_rag.start_ui_build",
   "arguments": {
     "goal": "reward popup",
+    "template_mode": "popup",
     "screen_name": "RewardPopupDraft",
     "title": "Reward Unlocked",
     "body": "Catalog-first popup draft",
@@ -222,6 +223,8 @@ reference 없이 catalog 기반 draft부터 시작하고 싶을 때도 같은 to
   }
 }
 ```
+
+catalog-first draft는 `template_mode`로 `popup`, `hud`, `list` 중 하나를 고를 수 있다.
 
 세부 단계를 직접 지정하고 싶을 때는 아래처럼 기존 tool을 개별 호출하면 된다.
 
