@@ -220,6 +220,13 @@ namespace UnityResourceRag.Editor
                 buildPayload?.SelectToken("execution.workflow.mcpHandoffBundle")?.ToString());
         }
 
+        public static string ExtractSearchReportPath(JObject buildPayload)
+        {
+            return FirstNonEmpty(
+                buildPayload?.SelectToken("execution.searchReport")?.ToString(),
+                buildPayload?.SelectToken("execution.workflow.bindingReport")?.ToString());
+        }
+
         public static string ExtractOutputDirectory(JObject buildPayload)
         {
             return FirstNonEmpty(

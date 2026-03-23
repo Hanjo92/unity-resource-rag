@@ -27,7 +27,7 @@
 4. Quick Setup 안의 sign-in method는 기본적으로 `Use my Codex sign-in (Recommended)`로 두는 것을 권장한다. API key 자체를 Unity에 붙여넣는 대신, 이미 로그인된 Codex 세션이나 기존 environment variable을 재사용하는 흐름이다.
 5. Readiness Dashboard에서 막힌 항목을 확인한다. Python이 막혀 있으면 `Bootstrap Python Runtime`으로 repo-local `.venv`를 준비한다.
 6. 같은 창에서 reference 이미지를 넣거나, `Draft Template`을 `Popup / HUD / List` 중 하나로 고른 뒤 goal/title/body를 채우고 `Start UI Build`를 누른다.
-7. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`까지 이어서 진행할 수 있다.
+7. build 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Last Run Artifacts`, `Export Case Report`까지 이어서 진행할 수 있다.
 8. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
 9. `ui_asset_catalog`는 callable tool이 아니라 MCP resource라는 점을 기억한다.
 
@@ -58,6 +58,7 @@
 - 없으면 선택한 `Draft Template`에 맞는 `catalog-first draft` path
 - 내부적으로 루트 `pipeline/mcp/local_runner.py`를 호출해서 readiness 확인과 `unity_rag.start_ui_build`를 순차 실행
 - doctor diagnostics와 Unity apply까지 한 번에 시도
+- 최근 build/capture/repair/case export 결과를 `Last Run Artifacts`에서 바로 다시 열 수 있게 유지
 - 성공 후에는 같은 창에서 `Capture Result`, `Run Repair Handoff`, `Export Case Report`로 이어질 수 있게 결과를 유지
 
 샘플:

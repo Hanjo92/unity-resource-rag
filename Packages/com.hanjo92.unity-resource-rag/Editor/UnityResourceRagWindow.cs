@@ -15,6 +15,7 @@ namespace UnityResourceRag.Editor
         private string _captureReport = string.Empty;
         private string _repairReport = string.Empty;
         private string _caseCaptureReport = string.Empty;
+        private string _artifactActionReport = string.Empty;
         private string _buildPhase = "Idle";
         private string _caseName = string.Empty;
         private string _caseNotes = string.Empty;
@@ -28,6 +29,7 @@ namespace UnityResourceRag.Editor
         private UnityResourceRagLocalToolResult _buildResult;
         private UnityResourceRagLocalToolResult _captureResult;
         private UnityResourceRagLocalToolResult _repairResult;
+        private UnityResourceRagCaseCaptureResult _caseCaptureResult;
 
         [MenuItem("Window/Unity Resource RAG")]
         public static void Open()
@@ -78,6 +80,7 @@ namespace UnityResourceRag.Editor
             DrawQuickSetupSection(settings);
             DrawBuildSection(settings);
             DrawFollowUpSection(settings);
+            DrawArtifactBrowserSection();
             DrawCaseCaptureSection(settings);
             settingsChanged = EditorGUI.EndChangeCheck();
 
@@ -261,8 +264,6 @@ namespace UnityResourceRag.Editor
                 }
             }
 
-            DrawBuildArtifacts();
-
             if (!string.IsNullOrWhiteSpace(_buildReport))
             {
                 EditorGUILayout.HelpBox(_buildReport, MessageType.None);
@@ -357,7 +358,38 @@ namespace UnityResourceRag.Editor
             }
         }
 
-        private void DrawBuildArtifacts()
+        private void DrawArtifactBrowserSection()
+        {
+            bool hasArtifacts =
+                (_buildResult != null && _buildResult.Success && _buildResult.Payload != null)
+                || (_captureResult != null && _captureResult.Success && _captureResult.Payload != null)
+                || (_repairResult != null && _repairResult.Success && _repairResult.Payload != null)
+                || _caseCaptureResult != null;
+
+            EditorGUILayout.Space(10f);
+            EditorGUILayout.LabelField("Last Run Artifacts", EditorStyles.boldLabel);
+
+            if (!hasArtifacts)
+            {
+                EditorGUILayout.HelpBox(
+                    "After a successful build, capture, repair, or case export, this section keeps the latest artifacts in one place so you can reopen them without copying paths from logs.",
+                    MessageType.None);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_artifactActionReport))
+            {
+                EditorGUILayout.HelpBox(_artifactActionReport, MessageType.None);
+            }
+
+            DrawLastRunSummary();
+            DrawBuildArtifactGroup();
+            DrawCaptureArtifactGroup();
+            DrawRepairArtifactGroup();
+            DrawCaseArtifactGroup();
+        }
+
+        private void DrawLastRunSummary()
         {
             if (_buildResult == null || !_buildResult.Success || _buildResult.Payload == null)
             {
@@ -366,15 +398,80 @@ namespace UnityResourceRag.Editor
 
             JObject payload = _buildResult.Payload;
             using var box = new EditorGUILayout.VerticalScope("box");
-            EditorGUILayout.LabelField("Last Build Output", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Last Run Summary", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("Flow", UnityResourceRagReportFormatter.ExtractRouteLabel(payload));
-            DrawSelectableArtifact("Blueprint", UnityResourceRagReportFormatter.ExtractBlueprintPath(payload));
-            DrawSelectableArtifact("Handoff", UnityResourceRagReportFormatter.ExtractHandoffPath(payload));
-            DrawSelectableArtifact("Applied Root", UnityResourceRagReportFormatter.ExtractAppliedRootName(payload));
-            DrawSelectableArtifact("Verify Target", UnityResourceRagReportFormatter.ExtractVerifyTarget(payload));
+
+            string templateMode = payload.SelectToken("execution.templateMode")?.ToString();
+            if (!string.IsNullOrWhiteSpace(templateMode))
+            {
+                EditorGUILayout.LabelField("Draft Template", templateMode);
+            }
+
+            DrawHierarchyTargetActions("Applied Root", UnityResourceRagReportFormatter.ExtractAppliedRootName(payload));
+            DrawHierarchyTargetActions("Verify Target", UnityResourceRagReportFormatter.ExtractVerifyTarget(payload));
         }
 
-        private void DrawSelectableArtifact(string label, string value)
+        private void DrawBuildArtifactGroup()
+        {
+            if (_buildResult == null || !_buildResult.Success || _buildResult.Payload == null)
+            {
+                return;
+            }
+
+            JObject payload = _buildResult.Payload;
+            using var box = new EditorGUILayout.VerticalScope("box");
+            EditorGUILayout.LabelField("Build Outputs", EditorStyles.boldLabel);
+            DrawArtifactActionRow("Blueprint", UnityResourceRagReportFormatter.ExtractBlueprintPath(payload));
+            DrawArtifactActionRow("Search Report", UnityResourceRagReportFormatter.ExtractSearchReportPath(payload));
+            DrawArtifactActionRow("Handoff", UnityResourceRagReportFormatter.ExtractHandoffPath(payload));
+            DrawArtifactActionRow("Output Folder", UnityResourceRagReportFormatter.ExtractOutputDirectory(payload), treatAsFolder: true);
+        }
+
+        private void DrawCaptureArtifactGroup()
+        {
+            if (_captureResult == null || !_captureResult.Success || _captureResult.Payload == null)
+            {
+                return;
+            }
+
+            JObject payload = _captureResult.Payload;
+            using var box = new EditorGUILayout.VerticalScope("box");
+            EditorGUILayout.LabelField("Capture Outputs", EditorStyles.boldLabel);
+            DrawArtifactActionRow("Screenshot", payload.Value<string>("capturedPath"));
+            DrawArtifactActionRow("Unity Asset Path", payload.Value<string>("capturedPathRelative"), allowOpen: false, allowReveal: false, allowPing: true);
+            DrawArtifactActionRow("Screenshots Folder", payload.Value<string>("screenshotsFolder"), treatAsFolder: true);
+        }
+
+        private void DrawRepairArtifactGroup()
+        {
+            if (_repairResult == null || !_repairResult.Success || _repairResult.Payload == null)
+            {
+                return;
+            }
+
+            JObject payload = _repairResult.Payload;
+            using var box = new EditorGUILayout.VerticalScope("box");
+            EditorGUILayout.LabelField("Repair Outputs", EditorStyles.boldLabel);
+            DrawArtifactActionRow("Verification Report", payload.Value<string>("verificationReport"));
+            DrawArtifactActionRow("Repair Handoff", payload.Value<string>("repairHandoff"));
+            DrawArtifactActionRow("Workflow Report", payload.Value<string>("workflowReport"));
+        }
+
+        private void DrawCaseArtifactGroup()
+        {
+            if (_caseCaptureResult == null)
+            {
+                return;
+            }
+
+            using var box = new EditorGUILayout.VerticalScope("box");
+            EditorGUILayout.LabelField("Case Export Outputs", EditorStyles.boldLabel);
+            DrawArtifactActionRow("Case Folder", _caseCaptureResult.OutputDirectory, treatAsFolder: true);
+            DrawArtifactActionRow("Case Markdown", _caseCaptureResult.MarkdownReportPath);
+            DrawArtifactActionRow("Case JSON", _caseCaptureResult.JsonReportPath);
+        }
+
+        private void DrawHierarchyTargetActions(string label, string value)
         {
             if (string.IsNullOrWhiteSpace(value))
             {
@@ -382,7 +479,92 @@ namespace UnityResourceRag.Editor
             }
 
             EditorGUILayout.LabelField(label, EditorStyles.miniBoldLabel);
-            EditorGUILayout.LabelField(value, EditorStyles.wordWrappedMiniLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.SelectableLabel(value, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                if (GUILayout.Button("Select", GUILayout.Width(64f)))
+                {
+                    if (UnityResourceRagArtifactActions.TrySelectHierarchyObject(value, out string error))
+                    {
+                        _artifactActionReport = $"{label} selected in the Hierarchy: {value}";
+                    }
+                    else
+                    {
+                        _artifactActionReport = error;
+                    }
+                }
+
+                if (GUILayout.Button("Copy", GUILayout.Width(64f)))
+                {
+                    UnityResourceRagArtifactActions.CopyToClipboard(value);
+                    _artifactActionReport = $"{label} copied to the clipboard.";
+                }
+            }
+        }
+
+        private void DrawArtifactActionRow(string label, string value, bool treatAsFolder = false, bool allowOpen = true, bool allowReveal = true, bool allowPing = false)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            EditorGUILayout.LabelField(label, EditorStyles.miniBoldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.SelectableLabel(value, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+
+                using (new EditorGUI.DisabledScope(!allowOpen))
+                {
+                    if (GUILayout.Button("Open", GUILayout.Width(52f)))
+                    {
+                        if (UnityResourceRagArtifactActions.TryOpenPath(value, out string error))
+                        {
+                            _artifactActionReport = $"{label} opened.";
+                        }
+                        else
+                        {
+                            _artifactActionReport = error;
+                        }
+                    }
+                }
+
+                using (new EditorGUI.DisabledScope(!allowReveal))
+                {
+                    if (GUILayout.Button(treatAsFolder ? "Show" : "Reveal", GUILayout.Width(60f)))
+                    {
+                        if (UnityResourceRagArtifactActions.TryRevealPath(value, out string error))
+                        {
+                            _artifactActionReport = $"{label} revealed in Finder.";
+                        }
+                        else
+                        {
+                            _artifactActionReport = error;
+                        }
+                    }
+                }
+
+                if (GUILayout.Button("Copy", GUILayout.Width(52f)))
+                {
+                    UnityResourceRagArtifactActions.CopyToClipboard(value);
+                    _artifactActionReport = $"{label} copied to the clipboard.";
+                }
+
+                using (new EditorGUI.DisabledScope(!allowPing))
+                {
+                    if (GUILayout.Button("Ping", GUILayout.Width(52f)))
+                    {
+                        if (UnityResourceRagArtifactActions.TryPingProjectAsset(value, out string error))
+                        {
+                            _artifactActionReport = $"{label} highlighted in the Project window.";
+                        }
+                        else
+                        {
+                            _artifactActionReport = error;
+                        }
+                    }
+                }
+            }
         }
 
         private void RunQuickSetup(UnityResourceRagEditorSettings settings)
@@ -491,8 +673,11 @@ namespace UnityResourceRag.Editor
             _buildReport = "Rechecking readiness before the build starts.";
             _captureResult = null;
             _repairResult = null;
+            _caseCaptureResult = null;
             _captureReport = string.Empty;
             _repairReport = string.Empty;
+            _caseCaptureReport = string.Empty;
+            _artifactActionReport = string.Empty;
             Repaint();
 
             if (!UnityResourceRagLocalRunner.TryRunDoctorAsync(settings, OnBuildReadinessCompleted, out string error))
@@ -665,6 +850,7 @@ namespace UnityResourceRag.Editor
                 _repairResult,
                 _caseName,
                 _caseNotes);
+            _caseCaptureResult = result;
             _caseCaptureReport = UnityResourceRagReportFormatter.FormatCaseCaptureReport(result);
             if (result.Success)
             {

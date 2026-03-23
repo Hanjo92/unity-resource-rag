@@ -117,7 +117,8 @@ python3 /absolute/path/to/unity-resource-rag/pipeline/mcp/server.py
 6. 이 버튼은 내부적으로 readiness를 다시 확인한 뒤 `unity_rag.start_ui_build`를 호출하고, reference가 있으면 `run_first_pass_ui_build`, 없으면 `run_catalog_draft_ui_build`를 자동 선택한다.
 7. build가 끝나면 같은 창에서 `Capture Result`로 현재 Unity 결과를 캡처한다.
 8. reference build였다면 `Run Repair Handoff`로 mismatch report와 repair bundle을 만든다.
-9. 검토 케이스를 남기고 싶으면 `Export Case Report`로 md/json 리포트를 `Library/ResourceRag/Cases/` 아래에 저장한다.
+9. `Last Run Artifacts`에서 blueprint, search report, handoff, screenshot, repair output을 `Open / Reveal / Copy`로 바로 다시 연다.
+10. 검토 케이스를 남기고 싶으면 `Export Case Report`로 md/json 리포트를 `Library/ResourceRag/Cases/` 아래에 저장한다.
 
 > Unity window 기반 one-click build는 full local checkout 경로를 알아야 한다. Git URL로 패키지만 설치된 상태라면 `Sidecar Repo Root`에 전체 저장소 checkout 경로를 따로 지정해야 한다.
 
