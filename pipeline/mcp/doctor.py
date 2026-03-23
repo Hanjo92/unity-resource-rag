@@ -97,20 +97,20 @@ def _build_provider_config(args: dict[str, Any]) -> ProviderConfig:
 
 def _token_source_summary(inspection: Any) -> str:
     if inspection.resolved_provider == "local_heuristic":
-        return "불필요 (local_heuristic)"
+        return "Not needed (local_heuristic)"
     if inspection.auth_mode == "api_key":
-        return f"API key 환경 변수 `{inspection.provider_api_key_env}`"
+        return f"API key environment variable `{inspection.provider_api_key_env}`"
     if inspection.resolved_provider == "gateway" and inspection.token_source_detail:
-        return f"선택적 gateway bearer env `{inspection.token_source_detail}`"
+        return f"Optional gateway bearer env `{inspection.token_source_detail}`"
     if inspection.token_source == "env" and inspection.token_source_detail:
-        return f"환경 변수 `{inspection.token_source_detail}`"
+        return f"Environment variable `{inspection.token_source_detail}`"
     if inspection.token_source == "file" and inspection.token_source_detail:
-        return f"토큰 파일 `{inspection.token_source_detail}`"
+        return f"Token file `{inspection.token_source_detail}`"
     if inspection.token_source == "command" and inspection.token_source_detail:
-        return f"토큰 명령 `{inspection.token_source_detail}`"
+        return f"Token command `{inspection.token_source_detail}`"
     if inspection.token_source == "codex_file" and inspection.token_source_detail:
-        return f"Codex 로그인 파일 `{inspection.token_source_detail}`"
-    return "미확인"
+        return f"Codex sign-in file `{inspection.token_source_detail}`"
+    return "Unknown"
 
 
 def _check_provider_setup(args: dict[str, Any]) -> DoctorCheck:
@@ -133,14 +133,14 @@ def _check_provider_setup(args: dict[str, Any]) -> DoctorCheck:
         return DoctorCheck(
             key="provider_setup",
             status="warn",
-            summary=f"provider 설정에 추가 입력이 필요합니다 ({inspection.resolved_provider}).",
+            summary=f"Provider setup needs additional input ({inspection.resolved_provider}).",
             details=details,
             next_actions=list(inspection.next_actions),
         )
     return DoctorCheck(
         key="provider_setup",
         status="ok",
-        summary=f"provider 설정이 실행 가능한 상태입니다 ({inspection.resolved_provider}).",
+        summary=f"Provider setup is ready to run ({inspection.resolved_provider}).",
         details=details,
         next_actions=[],
     )
@@ -151,7 +151,7 @@ def _check_unity_project(project_path: Path | None) -> DoctorCheck:
         return DoctorCheck(
             key="unity_project",
             status="skipped",
-            summary="Unity 프로젝트 경로가 없어 프로젝트 구조 검사를 건너뜁니다.",
+            summary="Skipped project structure checks because no Unity project path was provided.",
             details={},
             next_actions=[],
         )
@@ -159,17 +159,17 @@ def _check_unity_project(project_path: Path | None) -> DoctorCheck:
         return DoctorCheck(
             key="unity_project",
             status="error",
-            summary="Unity 프로젝트 경로를 찾을 수 없습니다.",
+            summary="The Unity project path could not be found.",
             details={"unityProjectPath": str(project_path)},
-            next_actions=["`unity_project_path`에 실제 Unity 프로젝트 루트를 넣습니다."],
+            next_actions=["Set `unity_project_path` to the actual Unity project root."],
         )
     if not project_path.is_dir():
         return DoctorCheck(
             key="unity_project",
             status="error",
-            summary="Unity 프로젝트 경로가 디렉터리가 아닙니다.",
+            summary="The Unity project path is not a directory.",
             details={"unityProjectPath": str(project_path)},
-            next_actions=["`unity_project_path`에 실제 Unity 프로젝트 루트를 넣습니다."],
+            next_actions=["Set `unity_project_path` to the actual Unity project root."],
         )
 
     missing_dirs = [
@@ -181,15 +181,15 @@ def _check_unity_project(project_path: Path | None) -> DoctorCheck:
         return DoctorCheck(
             key="unity_project",
             status="error",
-            summary="Unity 프로젝트 기본 폴더 구조가 아닙니다.",
+            summary="The path does not look like a Unity project root.",
             details={"unityProjectPath": str(project_path), "missingDirectories": missing_dirs},
-            next_actions=["`Assets`, `Packages`, `ProjectSettings`가 있는 Unity 프로젝트 루트를 지정합니다."],
+            next_actions=["Point to a Unity project root that contains `Assets`, `Packages`, and `ProjectSettings`."],
         )
 
     return DoctorCheck(
         key="unity_project",
         status="ok",
-        summary="Unity 프로젝트 구조가 확인되었습니다.",
+        summary="The Unity project structure looks valid.",
         details={"unityProjectPath": str(project_path)},
         next_actions=[],
     )
@@ -234,18 +234,18 @@ def _check_catalog(catalog_path: Path | None, project_path: Path | None) -> Doct
         return DoctorCheck(
             key="catalog",
             status="skipped",
-            summary="카탈로그 경로가 없어 catalog 검사를 건너뜁니다.",
+            summary="Skipped the catalog check because no catalog path was available.",
             details={},
             next_actions=[],
         )
     if not catalog_path.exists():
-        next_actions = ["Unity에서 `index_project_resources`를 실행해 카탈로그를 생성합니다."]
+        next_actions = ["Run `index_project_resources` in Unity to generate the catalog."]
         if project_path is None:
-            next_actions.append("`catalog` 또는 `unity_project_path`를 넘겨 기본 catalog 경로를 추론할 수 있게 합니다.")
+            next_actions.append("Pass `catalog` or `unity_project_path` so the default catalog path can be inferred.")
         return DoctorCheck(
             key="catalog",
             status="warn",
-            summary="카탈로그 파일을 찾지 못했습니다.",
+            summary="The catalog file could not be found.",
             details={"catalogPath": str(catalog_path)},
             next_actions=next_actions,
         )
@@ -256,24 +256,24 @@ def _check_catalog(catalog_path: Path | None, project_path: Path | None) -> Doct
         return DoctorCheck(
             key="catalog",
             status="error",
-            summary="카탈로그 파일은 있지만 읽을 수 없습니다.",
+            summary="The catalog file exists but could not be read.",
             details={"catalogPath": str(catalog_path), "error": str(exc)},
-            next_actions=["Unity에서 `index_project_resources`를 다시 실행해 카탈로그를 재생성합니다."],
+            next_actions=["Re-run `index_project_resources` in Unity to regenerate the catalog."],
         )
 
     if stats["recordCount"] == 0:
         return DoctorCheck(
             key="catalog",
             status="warn",
-            summary="카탈로그가 비어 있습니다.",
+            summary="The catalog exists but is empty.",
             details={"catalogPath": str(catalog_path), **stats},
-            next_actions=["프로젝트에 실제 UI 자산이 포함되어 있는지 확인하고 `index_project_resources`를 다시 실행합니다."],
+            next_actions=["Check that the project contains real UI assets, then re-run `index_project_resources`."],
         )
 
     return DoctorCheck(
         key="catalog",
         status="ok",
-        summary=f"카탈로그를 읽을 수 있습니다 (records={stats['recordCount']}).",
+        summary=f"The catalog can be read (records={stats['recordCount']}).",
         details={"catalogPath": str(catalog_path), **stats},
         next_actions=[],
     )
@@ -285,7 +285,7 @@ def _check_file_path(key: str, label: str, raw_path: Any) -> DoctorCheck:
         return DoctorCheck(
             key=key,
             status="skipped",
-            summary=f"{label} 경로가 없어 검사를 건너뜁니다.",
+            summary=f"Skipped this check because no {label} path was provided.",
             details={},
             next_actions=[],
         )
@@ -293,9 +293,9 @@ def _check_file_path(key: str, label: str, raw_path: Any) -> DoctorCheck:
         return DoctorCheck(
             key=key,
             status="warn",
-            summary=f"{label} 파일을 찾지 못했습니다.",
+            summary=f"The {label} file could not be found.",
             details={"path": str(path)},
-            next_actions=[f"`{key}`에 실제 {label} 파일 경로를 넣거나 파일 위치를 확인합니다."],
+            next_actions=[f"Set `{key}` to the actual {label} file path or verify the file location."],
         )
 
     details: dict[str, Any] = {
@@ -310,9 +310,9 @@ def _check_file_path(key: str, label: str, raw_path: Any) -> DoctorCheck:
             return DoctorCheck(
                 key=key,
                 status="error",
-                summary="resolved blueprint JSON을 파싱할 수 없습니다.",
+                summary="The resolved blueprint JSON could not be parsed.",
                 details={"path": str(path), "error": str(exc)},
-                next_actions=["resolved blueprint를 다시 생성하거나 파일이 손상되지 않았는지 확인합니다."],
+                next_actions=["Regenerate the resolved blueprint or confirm that the file is not corrupted."],
             )
         if isinstance(payload, dict):
             details["topLevelKeys"] = sorted(str(item) for item in payload.keys())
@@ -320,7 +320,7 @@ def _check_file_path(key: str, label: str, raw_path: Any) -> DoctorCheck:
     return DoctorCheck(
         key=key,
         status="ok",
-        summary=f"{label} 파일이 준비되어 있습니다.",
+        summary=f"The {label} file is available.",
         details=details,
         next_actions=[],
     )
@@ -342,7 +342,7 @@ def _check_gateway(args: dict[str, Any]) -> DoctorCheck:
         return DoctorCheck(
             key="gateway",
             status="skipped",
-            summary="gateway URL이 없어 gateway 검사를 건너뜁니다.",
+            summary="Skipped the gateway check because no gateway URL was provided.",
             details={},
             next_actions=[],
         )
@@ -357,11 +357,11 @@ def _check_gateway(args: dict[str, Any]) -> DoctorCheck:
         return DoctorCheck(
             key="gateway",
             status="error",
-            summary="gateway에 연결할 수 없습니다.",
+            summary="The gateway could not be reached.",
             details={"gatewayUrl": gateway_url, "healthUrl": health_url, "error": str(exc)},
             next_actions=[
-                "`python3 -m pipeline.gateway`로 gateway를 실행합니다.",
-                "gateway URL과 포트가 맞는지 확인합니다.",
+                "Start the gateway with `python3 -m pipeline.gateway`.",
+                "Confirm that the gateway URL and port are correct.",
             ],
         )
 
@@ -370,15 +370,15 @@ def _check_gateway(args: dict[str, Any]) -> DoctorCheck:
         return DoctorCheck(
             key="gateway",
             status="warn",
-            summary="gateway는 응답했지만 health payload가 예상과 다릅니다.",
+            summary="The gateway responded, but the health payload was not in the expected shape.",
             details={"gatewayUrl": gateway_url, "healthUrl": health_url, "payload": payload},
-            next_actions=["gateway 응답 payload와 실행 로그를 확인합니다."],
+            next_actions=["Inspect the gateway health payload and runtime logs."],
         )
 
     return DoctorCheck(
         key="gateway",
         status="ok",
-        summary="gateway `/health` 응답이 정상입니다.",
+        summary="The gateway `/health` response looks healthy.",
         details={"gatewayUrl": gateway_url, "healthUrl": health_url, "payload": payload},
         next_actions=[],
     )
@@ -414,7 +414,7 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         return DoctorCheck(
             key="unity_mcp",
             status="skipped",
-            summary="Unity MCP URL이 없어 Unity MCP 검사를 건너뜁니다.",
+            summary="Skipped the Unity MCP check because no Unity MCP URL was available.",
             details={},
             next_actions=[],
         )
@@ -429,11 +429,11 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         return DoctorCheck(
             key="unity_mcp",
             status="warn",
-            summary="Unity MCP HTTP Local에 연결할 수 없습니다.",
+            summary="Unity MCP HTTP Local could not be reached.",
             details={"unityMcpUrl": unity_mcp_url, "error": str(exc)},
             next_actions=[
-                "Unity에서 `Window > MCP for Unity`를 열고 Local HTTP Server를 시작합니다.",
-                "클라이언트가 다른 포트를 쓰고 있다면 `unity_mcp_url`을 실제 URL로 맞춥니다.",
+                "Open `Window > MCP for Unity` in Unity and start the Local HTTP Server.",
+                "If the client uses a different port, update `unity_mcp_url` to the actual URL.",
             ],
         )
 
@@ -471,11 +471,11 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         return DoctorCheck(
             key="unity_mcp",
             status="warn",
-            summary="Unity MCP는 reachable하지만 custom tool이 직접 노출되지 않았습니다.",
+            summary="Unity MCP is reachable, but custom tools are not directly exposed.",
             details=details,
             next_actions=[
-                "Unity MCP HTTP Local에서 `Project Scoped Tools`를 끄고 Local HTTP Server를 다시 시작합니다.",
-                "클라이언트에서 tool 목록을 다시 읽습니다.",
+                "Turn off `Project Scoped Tools` in Unity MCP HTTP Local and restart the Local HTTP Server.",
+                "Refresh the tool list in the client.",
             ],
         )
 
@@ -483,11 +483,11 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         return DoctorCheck(
             key="unity_mcp",
             status="warn",
-            summary="Unity MCP에 필요한 custom tool 일부가 보이지 않습니다.",
+            summary="Some required Unity MCP custom tools are still missing.",
             details=details,
             next_actions=[
-                "Unity에서 `index_project_resources`와 `apply_ui_blueprint`가 등록됐는지 확인합니다.",
-                "필요하면 Local HTTP Server를 다시 시작하고 tool 목록을 다시 읽습니다.",
+                "Confirm that `index_project_resources` and `apply_ui_blueprint` are registered in Unity.",
+                "If needed, restart the Local HTTP Server and refresh the tool list.",
             ],
         )
 
@@ -495,18 +495,18 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         return DoctorCheck(
             key="unity_mcp",
             status="warn",
-            summary="Unity MCP tool은 보이지만 `ui_asset_catalog` resource가 확인되지 않았습니다.",
+            summary="Unity MCP tools are visible, but the `ui_asset_catalog` resource was not found.",
             details=details,
             next_actions=[
-                "resource 목록에서 `ui_asset_catalog`가 노출되는지 확인합니다.",
-                "패키지 로딩 후 Unity MCP Local HTTP Server를 다시 시작합니다.",
+                "Check whether `ui_asset_catalog` is exposed in the resource list.",
+                "Restart the Unity MCP Local HTTP Server after the package finishes loading.",
             ],
         )
 
     return DoctorCheck(
         key="unity_mcp",
         status="ok",
-        summary="Unity MCP가 필요한 custom tool과 resource를 직접 노출하고 있습니다.",
+        summary="Unity MCP is directly exposing the required custom tools and resources.",
         details=details,
         next_actions=[],
     )

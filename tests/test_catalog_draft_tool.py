@@ -473,7 +473,7 @@ class CatalogDraftToolTests(unittest.TestCase):
             self.assertEqual(payload["templateMode"], "list")
             self.assertEqual(payload["shellSourceMode"], "shell_prefab")
             self.assertTrue(any("inventory shop list panel window shell" in query for query in observed_queries))
-            self.assertIn("3개 샘플 row", " ".join(payload["nextActions"]))
+            self.assertIn("three sample rows", " ".join(payload["nextActions"]))
 
             blueprint_path = Path(payload["draftBlueprint"])
             blueprint = json.loads(blueprint_path.read_text(encoding="utf-8"))

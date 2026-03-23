@@ -43,32 +43,32 @@ DEFAULT_DRAFT_OUTPUT_RELATIVE_PATH = Path("Library/ResourceRag/Drafts")
 DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS = 30000
 
 PROVIDER_DESCRIPTION = (
-    "추출 provider 선택. "
-    "`auto`: 권장값, gateway URL이나 감지 가능한 인증을 자동 선택. "
-    "`openai`: OpenAI API key 또는 Codex OAuth 사용. "
-    "`gemini`: Google API key 사용. "
-    "`antigravity`: Google OAuth/gcloud 토큰 사용. "
-    "`claude`: Anthropic API key 사용. "
-    "`claude_code`: Claude Code credential 사용. "
-    "`openai_compatible`: 사용자 지정 OpenAI-compatible endpoint 사용. "
-    "`gateway`: team/provider gateway 사용. "
-    "`local_heuristic`: 완전 로컬 fallback."
+    "Select the extraction provider. "
+    "`auto`: recommended; automatically uses a gateway URL or detectable auth source. "
+    "`openai`: uses an OpenAI API key or Codex OAuth. "
+    "`gemini`: uses a Google API key. "
+    "`antigravity`: uses Google OAuth or a gcloud token. "
+    "`claude`: uses an Anthropic API key. "
+    "`claude_code`: uses Claude Code credentials. "
+    "`openai_compatible`: uses a custom OpenAI-compatible endpoint. "
+    "`gateway`: uses the team/provider gateway. "
+    "`local_heuristic`: fully local fallback."
 )
 
-ADVANCED_SETTING_SUFFIX = "고급 설정. 대부분의 사용자는 비워두고 `provider=auto`만 선택하면 됨."
+ADVANCED_SETTING_SUFFIX = "Advanced setting. Most users can leave this blank and only use `provider=auto`."
 
 CONNECTION_PRESET_DESCRIPTION = (
-    "초기 연결 설정용 프리셋. "
-    "`recommended_auto`: 권장값, 감지 가능한 인증을 자동 선택. "
-    "`codex_oauth`: Codex OAuth로 OpenAI 연결. "
-    "`openai_api_key`: OPENAI_API_KEY로 OpenAI 연결. "
-    "`gemini_api_key`: GEMINI_API_KEY 또는 GOOGLE_API_KEY로 Gemini 연결. "
-    "`google_oauth`: GOOGLE_OAUTH_ACCESS_TOKEN 또는 gcloud 토큰으로 Google OAuth 연결. "
-    "`claude_api_key`: ANTHROPIC_API_KEY로 Claude 연결. "
-    "`claude_code`: ANTHROPIC_AUTH_TOKEN 또는 Claude Code credential로 연결. "
-    "`custom_openai_compatible`: 사용자 지정 OpenAI-compatible endpoint 연결. "
-    "`offline_local`: 네트워크 없이 local heuristic만 사용. "
-    "프리셋이 지정되면 같은 범주의 저수준 provider/auth 입력보다 프리셋이 우선한다."
+    "Preset for first-time connection setup. "
+    "`recommended_auto`: recommended; automatically picks a detectable auth source. "
+    "`codex_oauth`: connects OpenAI through Codex OAuth. "
+    "`openai_api_key`: connects OpenAI with `OPENAI_API_KEY`. "
+    "`gemini_api_key`: connects Gemini with `GEMINI_API_KEY` or `GOOGLE_API_KEY`. "
+    "`google_oauth`: connects Google OAuth with `GOOGLE_OAUTH_ACCESS_TOKEN` or a gcloud token. "
+    "`claude_api_key`: connects Claude with `ANTHROPIC_API_KEY`. "
+    "`claude_code`: connects with `ANTHROPIC_AUTH_TOKEN` or Claude Code credentials. "
+    "`custom_openai_compatible`: connects to a custom OpenAI-compatible endpoint. "
+    "`offline_local`: only uses the local heuristic with no network access. "
+    "When a preset is provided, it takes precedence over lower-level provider/auth inputs in the same category."
 )
 
 PROVIDER_ENUM = ["auto", "openai", "gemini", "antigravity", "claude", "claude_code", "openai_compatible", "gateway", "local_heuristic"]
@@ -180,6 +180,16 @@ def _advanced_description(base: str) -> str:
     return f"{base} {ADVANCED_SETTING_SUFFIX}"
 
 
+CUSTOM_BASE_URL_DESCRIPTION = _advanced_description("Custom OpenAI-compatible endpoint or base URL override.")
+API_KEY_ENV_DESCRIPTION = _advanced_description("Environment variable name used to read the API key.")
+AUTH_MODE_DESCRIPTION = _advanced_description("Authentication mode for API-backed providers.")
+OAUTH_TOKEN_ENV_DESCRIPTION = _advanced_description("Environment variable name used to read the OAuth bearer token.")
+OAUTH_TOKEN_FILE_DESCRIPTION = _advanced_description("File path containing the OAuth bearer token.")
+OAUTH_TOKEN_COMMAND_DESCRIPTION = _advanced_description("Command that prints an OAuth bearer token to stdout.")
+CODEX_AUTH_FILE_DESCRIPTION = _advanced_description("Path to the Codex OAuth auth.json file.")
+GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION = _advanced_description("Environment variable name used to read the gateway bearer token.")
+
+
 def _apply_connection_preset(args: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(args)
     preset = normalized.get("connection_preset")
@@ -206,15 +216,15 @@ def _build_extract_reference_layout_schema() -> dict[str, Any]:
             "screen_name": {"type": "string"},
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
@@ -241,15 +251,15 @@ def _build_run_reference_to_resolved_blueprint_schema() -> dict[str, Any]:
             "screen_name": {"type": "string"},
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
@@ -301,15 +311,15 @@ def _build_inspect_provider_setup_schema() -> dict[str, Any]:
         "properties": {
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
         },
         "additionalProperties": False,
@@ -320,23 +330,23 @@ def _build_doctor_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "unity_project_path": {"type": "string", "description": "Unity 프로젝트 루트 경로. 주면 기본 catalog 경로를 함께 진단한다."},
-            "catalog": {"type": "string", "description": "resource_catalog.jsonl 경로. unity_project_path가 있으면 상대 경로도 허용한다."},
-            "reference_image": {"type": "string", "description": "선택적 reference image 경로."},
-            "resolved_blueprint": {"type": "string", "description": "선택적 resolved blueprint JSON 경로."},
-            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. 생략 시 unity_project_path가 있으면 기본값 `http://127.0.0.1:8080/mcp`를 가정한다."},
+            "unity_project_path": {"type": "string", "description": "Unity project root path. When provided, the default catalog path is also checked."},
+            "catalog": {"type": "string", "description": "Path to resource_catalog.jsonl. Relative paths are allowed when `unity_project_path` is set."},
+            "reference_image": {"type": "string", "description": "Optional reference image path."},
+            "resolved_blueprint": {"type": "string", "description": "Optional resolved blueprint JSON path."},
+            "unity_mcp_url": {"type": "string", "description": "Unity MCP HTTP Local URL. If omitted and `unity_project_path` is provided, `http://127.0.0.1:8080/mcp` is assumed."},
             "unity_mcp_timeout_ms": {"type": "integer", "minimum": 1, "description": "Unity MCP HTTP Local probe timeout in milliseconds."},
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
         },
         "additionalProperties": False,
@@ -361,15 +371,15 @@ def _build_run_first_pass_ui_build_schema() -> dict[str, Any]:
             "validate_before_apply": {"type": "boolean", "description": "When true, call apply_ui_blueprint validate before apply.", "default": True},
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
@@ -391,20 +401,20 @@ def _build_run_catalog_draft_ui_build_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "goal": {"type": "string", "description": "만들고 싶은 UI draft 설명. catalog search와 기본 본문 문구에 함께 사용한다."},
-            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "catalog-first draft 템플릿 선택. `popup`, `hud`, `list` 중 하나."},
-            "screen_name": {"type": "string", "description": "출력 blueprint와 Canvas 이름에 사용할 screen name. 생략 시 CatalogDraft를 쓴다."},
-            "title": {"type": "string", "description": "헤더 텍스트. 생략 시 goal을 그대로 title에 쓴다."},
-            "subtitle": {"type": "string", "description": "선택적 서브타이틀."},
-            "body": {"type": "string", "description": "선택적 본문. 생략 시 goal을 그대로 body에 쓴다."},
-            "price_text": {"type": "string", "description": "선택적 가격/강조 텍스트."},
-            "primary_action_label": {"type": "string", "description": "선택적 1차 액션 라벨."},
-            "secondary_action_label": {"type": "string", "description": "선택적 2차 액션 라벨."},
-            "shell_query": {"type": "string", "description": "팝업 shell/prefab 후보를 찾을 때 쓸 질의문 override."},
-            "panel_query": {"type": "string", "description": "배경 panel sprite 후보를 찾을 때 쓸 질의문 override."},
-            "featured_asset_query": {"type": "string", "description": "대표 icon/sprite 후보를 찾을 때 쓸 질의문 override."},
-            "title_font_query": {"type": "string", "description": "title TMP font 후보를 찾을 때 쓸 질의문 override."},
-            "body_font_query": {"type": "string", "description": "body TMP font 후보를 찾을 때 쓸 질의문 override."},
+            "goal": {"type": "string", "description": "Short description of the UI you want to draft. Used for catalog search and fallback copy."},
+            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "Catalog-first draft template. One of `popup`, `hud`, or `list`."},
+            "screen_name": {"type": "string", "description": "Screen name used for the output blueprint and Canvas name. Defaults to `CatalogDraft`."},
+            "title": {"type": "string", "description": "Header text. Defaults to `goal` when omitted."},
+            "subtitle": {"type": "string", "description": "Optional subtitle."},
+            "body": {"type": "string", "description": "Optional body copy. Defaults to `goal` when omitted."},
+            "price_text": {"type": "string", "description": "Optional price or highlight text."},
+            "primary_action_label": {"type": "string", "description": "Optional primary action label."},
+            "secondary_action_label": {"type": "string", "description": "Optional secondary action label."},
+            "shell_query": {"type": "string", "description": "Override query used to find shell or prefab candidates."},
+            "panel_query": {"type": "string", "description": "Override query used to find background panel sprite candidates."},
+            "featured_asset_query": {"type": "string", "description": "Override query used to find featured icon or sprite candidates."},
+            "title_font_query": {"type": "string", "description": "Override query used to find title TMP font candidates."},
+            "body_font_query": {"type": "string", "description": "Override query used to find body TMP font candidates."},
             "unity_project_path": {"type": "string", "description": "Unity project root. Used to infer the default catalog path and local draft output path."},
             "catalog": {"type": "string", "description": "Path to resource_catalog.jsonl. If omitted and unity_project_path is set, defaults to Library/ResourceRag/resource_catalog.jsonl."},
             "vector_index": {"type": "string", "description": "Optional resource_vector_index.json path for richer catalog search scoring."},
@@ -424,10 +434,10 @@ def _build_start_ui_build_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "image": {"type": "string", "description": "Path to the reference image. 있으면 reference-first path를 우선 선택한다."},
-            "reference_layout": {"type": "string", "description": "Existing reference layout JSON. image 없이도 reference-first path를 강제할 수 있다."},
-            "goal": {"type": "string", "description": "reference가 없을 때 catalog-first draft에 쓸 UI goal 설명."},
-            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "reference가 없을 때 catalog-first draft 템플릿 선택."},
+            "image": {"type": "string", "description": "Path to the reference image. When provided, the reference-first path is selected."},
+            "reference_layout": {"type": "string", "description": "Existing reference layout JSON. Can force the reference-first path even without `image`."},
+            "goal": {"type": "string", "description": "UI goal used for the catalog-first draft path when no reference is provided."},
+            "template_mode": {"type": "string", "enum": DRAFT_TEMPLATE_MODE_ENUM, "description": "Catalog-first draft template used when no reference is provided."},
             "screen_name": {"type": "string"},
             "title": {"type": "string"},
             "subtitle": {"type": "string"},
@@ -449,19 +459,19 @@ def _build_start_ui_build_schema() -> dict[str, Any]:
             "force_reindex": {"type": "boolean"},
             "apply_in_unity": {"type": "boolean", "default": True},
             "validate_before_apply": {"type": "boolean", "default": True},
-            "run_doctor": {"type": "boolean", "description": "Start 전에 doctor diagnostics를 함께 실행할지 여부.", "default": True},
-            "require_doctor_ok": {"type": "boolean", "description": "doctor가 error면 실제 build 실행을 중단할지 여부.", "default": True},
+            "run_doctor": {"type": "boolean", "description": "Whether to run doctor diagnostics before starting the UI build.", "default": True},
+            "require_doctor_ok": {"type": "boolean", "description": "Whether to stop the build when doctor returns `error`.", "default": True},
             "connection_preset": {"type": "string", "enum": CONNECTION_PRESET_ENUM, "description": CONNECTION_PRESET_DESCRIPTION},
             "provider": {"type": "string", "enum": PROVIDER_ENUM, "description": PROVIDER_DESCRIPTION},
-            "provider_base_url": {"type": "string", "description": _advanced_description("사용자 지정 OpenAI-compatible endpoint나 base URL override.")},
-            "provider_api_key_env": {"type": "string", "description": _advanced_description("API key를 읽을 환경 변수 이름.")},
-            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": _advanced_description("API-backed provider 인증 방식.")},
-            "oauth_token_env": {"type": "string", "description": _advanced_description("OAuth bearer token을 읽을 환경 변수 이름.")},
-            "oauth_token_file": {"type": "string", "description": _advanced_description("OAuth bearer token이 들어 있는 파일 경로.")},
-            "oauth_token_command": {"type": "string", "description": _advanced_description("OAuth bearer token을 stdout으로 출력하는 명령.")},
-            "codex_auth_file": {"type": "string", "description": _advanced_description("Codex OAuth auth.json 파일 경로.")},
+            "provider_base_url": {"type": "string", "description": CUSTOM_BASE_URL_DESCRIPTION},
+            "provider_api_key_env": {"type": "string", "description": API_KEY_ENV_DESCRIPTION},
+            "auth_mode": {"type": "string", "enum": ["api_key", "oauth_token"], "description": AUTH_MODE_DESCRIPTION},
+            "oauth_token_env": {"type": "string", "description": OAUTH_TOKEN_ENV_DESCRIPTION},
+            "oauth_token_file": {"type": "string", "description": OAUTH_TOKEN_FILE_DESCRIPTION},
+            "oauth_token_command": {"type": "string", "description": OAUTH_TOKEN_COMMAND_DESCRIPTION},
+            "codex_auth_file": {"type": "string", "description": CODEX_AUTH_FILE_DESCRIPTION},
             "gateway_url": {"type": "string", "description": _advanced_description("Gateway base URL.")},
-            "gateway_auth_token_env": {"type": "string", "description": _advanced_description("Gateway bearer token을 읽을 환경 변수 이름.")},
+            "gateway_auth_token_env": {"type": "string", "description": GATEWAY_AUTH_TOKEN_ENV_DESCRIPTION},
             "gateway_timeout_ms": {"type": "integer", "minimum": 1, "description": _advanced_description("Gateway request timeout in milliseconds.")},
             "model": {"type": "string"},
             "detail": {"type": "string", "enum": ["low", "high", "auto"]},
@@ -507,15 +517,15 @@ def _format_tool_error(message: str, details: dict[str, Any] | None = None) -> d
 
 
 def _format_inspection_summary(payload: dict[str, Any]) -> str:
-    missing_settings = payload.get("missingSettings") or ["없음"]
-    next_actions = payload.get("nextActions") or ["없음"]
+    missing_settings = payload.get("missingSettings") or ["None"]
+    next_actions = payload.get("nextActions") or ["None"]
     return "\n".join([
-        f"현재 권장 선택: {payload['recommendedChoice']}",
-        f"실제로 해석된 provider: {payload['resolvedProvider']}",
-        f"토큰 소스: {payload['tokenSourceSummary']}",
-        "누락된 설정:",
+        f"Recommended choice: {payload['recommendedChoice']}",
+        f"Resolved provider: {payload['resolvedProvider']}",
+        f"Token source: {payload['tokenSourceSummary']}",
+        "Missing settings:",
         *[f"- {item}" for item in missing_settings],
-        "다음 액션:",
+        "Next actions:",
         *[f"- {item}" for item in next_actions],
     ])
 
@@ -1637,19 +1647,19 @@ def inspect_provider_setup(args: dict[str, Any]) -> dict[str, Any]:
     )
 
     inspection = inspect_provider_setup_config(config)
-    token_source_summary = "불필요 (local_heuristic)" if inspection.resolved_provider == "local_heuristic" else "미확인"
+    token_source_summary = "Not needed (local_heuristic)" if inspection.resolved_provider == "local_heuristic" else "Unknown"
     if inspection.auth_mode == "api_key":
-        token_source_summary = f"API key 환경 변수 `{inspection.provider_api_key_env}`"
+        token_source_summary = f"API key environment variable `{inspection.provider_api_key_env}`"
     elif inspection.resolved_provider == "gateway" and inspection.token_source_detail:
-        token_source_summary = f"선택적 gateway bearer env `{inspection.token_source_detail}`"
+        token_source_summary = f"Optional gateway bearer env `{inspection.token_source_detail}`"
     elif inspection.token_source == "env" and inspection.token_source_detail:
-        token_source_summary = f"환경 변수 `{inspection.token_source_detail}`"
+        token_source_summary = f"Environment variable `{inspection.token_source_detail}`"
     elif inspection.token_source == "file" and inspection.token_source_detail:
-        token_source_summary = f"토큰 파일 `{inspection.token_source_detail}`"
+        token_source_summary = f"Token file `{inspection.token_source_detail}`"
     elif inspection.token_source == "command" and inspection.token_source_detail:
-        token_source_summary = f"토큰 명령 `{inspection.token_source_detail}`"
+        token_source_summary = f"Token command `{inspection.token_source_detail}`"
     elif inspection.token_source == "codex_file" and inspection.token_source_detail:
-        token_source_summary = f"Codex 로그인 파일 `{inspection.token_source_detail}`"
+        token_source_summary = f"Codex sign-in file `{inspection.token_source_detail}`"
 
     payload = {
         "requestedProvider": inspection.requested_provider,
@@ -1707,7 +1717,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     unity_project_path = _resolve_optional_path(args.get("unity_project_path"))
     catalog_path = _resolve_catalog_path(args.get("catalog"), unity_project_path)
     if catalog_path is None:
-        raise ToolExecutionError("`catalog` 또는 `unity_project_path`가 필요합니다.")
+        raise ToolExecutionError("`catalog` or `unity_project_path` is required.")
 
     apply_in_unity = bool(args.get("apply_in_unity", True))
     validate_before_apply = bool(args.get("validate_before_apply", True))
@@ -1781,8 +1791,8 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     next_actions: list[str] = []
     verify_request = ((handoff_payload or {}).get("requests") or {}).get("verify")
     if verify_request:
-        next_actions.append("적용 후 `manage_camera` screenshot 요청으로 첫 결과를 캡처합니다.")
-    next_actions.append("결과가 다르면 `unity_rag.run_verification_repair_loop`로 repair handoff를 생성합니다.")
+        next_actions.append("After apply, capture the first result with a `manage_camera` screenshot request.")
+    next_actions.append("If the result looks off, run `unity_rag.run_verification_repair_loop` to generate a repair handoff.")
 
     payload = {
         "unityProjectPath": str(unity_project_path) if unity_project_path else None,
@@ -1817,7 +1827,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     unity_project_path = _resolve_optional_path(args.get("unity_project_path"))
     catalog_path = _resolve_catalog_path(args.get("catalog"), unity_project_path)
     if catalog_path is None:
-        raise ToolExecutionError("`catalog` 또는 `unity_project_path`가 필요합니다.")
+        raise ToolExecutionError("`catalog` or `unity_project_path` is required.")
 
     vector_index_path = _resolve_path_against_project(args.get("vector_index"), unity_project_path)
     output_dir = _resolve_path_against_project(args.get("output_dir"), unity_project_path)
@@ -2034,20 +2044,20 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
     verify_request = ((handoff_bundle or {}).get("requests") or {}).get("verify")
     next_actions = [
-        "draft가 뜨면 제목/본문/가격 문구와 spacing을 먼저 조정합니다.",
-        "결과가 다르면 `manage_camera` screenshot으로 캡처한 뒤 `unity_rag.run_verification_repair_loop`로 repair handoff를 만듭니다.",
+        "Once the draft appears, adjust the title, body, price copy, and spacing first.",
+        "If the result looks off, capture it with `manage_camera` and then run `unity_rag.run_verification_repair_loop` to create a repair handoff.",
     ]
     if template_mode == "hud":
-        next_actions.insert(0, "HUD draft는 상단 bar / 상태 정보 배치 중심으로 만들어집니다. 실제 게임 리듬에 맞게 폭과 아이콘 밀도를 먼저 조정하세요.")
+        next_actions.insert(0, "The HUD draft is optimized around a top bar and status information layout. Tune the width and icon density to match the pacing of your game.")
     elif template_mode == "list":
-        next_actions.insert(0, "List draft는 3개 샘플 row를 생성합니다. 실제 inventory나 shop flow에 맞게 row 수와 action 문구를 조정하세요.")
+        next_actions.insert(0, "The list draft creates three sample rows. Adjust the row count and action copy to match your actual inventory or shop flow.")
     else:
-        next_actions.insert(0, "Popup draft는 modal/panel 중심 초안입니다. 제목-본문-액션 hierarchy가 먼저 맞는지 확인하세요.")
+        next_actions.insert(0, "The popup draft starts as a modal or panel-focused layout. First confirm that the title, body, and action hierarchy feels right.")
 
     if shell_source_mode == "bare_container":
-        next_actions.insert(1, f"{template_mode} shell 후보를 못 찾아 bare container로 생성했습니다. `shell_query`를 더 구체적으로 주거나 대표 {template_mode} prefab 경로를 확인해 보세요.")
+        next_actions.insert(1, f"No {template_mode} shell candidate was found, so the draft was built as a bare container. Make `shell_query` more specific or confirm the representative {template_mode} prefab path.")
     elif shell_source_mode == "panel_sprite":
-        next_actions.insert(1, "prefab shell 대신 panel sprite 기반 draft를 만들었습니다. affordance나 버튼 배치는 수동 보강이 필요할 수 있습니다.")
+        next_actions.insert(1, "This draft used a panel sprite instead of a prefab shell. Affordances and button placement may need manual follow-up.")
 
     payload = {
         "unityProjectPath": str(unity_project_path) if unity_project_path else None,
@@ -2210,43 +2220,43 @@ def build_mcp_handoff_bundle(args: dict[str, Any]) -> dict[str, Any]:
 TOOLS: list[ToolSpec] = [
     ToolSpec(
         name="unity_rag.start_ui_build",
-        description="가장 짧은 단일 진입점이다. 먼저 doctor diagnostics를 함께 실행하고, `image`/`reference_layout`가 있으면 reference-first path를, 없으면 catalog-first draft path를 자동 선택해 Unity apply까지 이어준다.",
+        description="Shortest single entrypoint. Runs doctor diagnostics first, then automatically chooses the reference-first path when `image` or `reference_layout` is present, or the catalog-first draft path otherwise, and continues through Unity apply.",
         input_schema=_build_start_ui_build_schema(),
         handler=start_ui_build,
     ),
     ToolSpec(
         name="unity_rag.doctor",
-        description="현재 설정과 로컬 실행 환경을 한 번에 진단한다. provider/auth, Unity 프로젝트 경로, catalog 존재 여부, gateway health, Unity MCP HTTP Local custom tool/resource 노출 상태를 함께 점검한다.",
+        description="Diagnoses the current configuration and local runtime in one pass. Checks provider/auth, the Unity project path, catalog presence, gateway health, and Unity MCP HTTP Local custom tool/resource exposure.",
         input_schema=_build_doctor_schema(),
         handler=doctor,
     ),
     ToolSpec(
         name="unity_rag.inspect_provider_setup",
-        description="실제 workflow 실행 전 provider/auth 설정만 진단한다. 처음 연결할 때는 이 tool로 권장 preset, 해석된 provider, 토큰 소스, 누락된 설정, 다음 액션을 먼저 확인하는 것이 좋다.",
+        description="Inspects only provider/auth setup before you run the full workflow. Useful for checking the recommended preset, resolved provider, token source, missing settings, and next actions during first-time setup.",
         input_schema=_build_inspect_provider_setup_schema(),
         handler=inspect_provider_setup,
     ),
     ToolSpec(
         name="unity_rag.run_first_pass_ui_build",
-        description="첫 성공 경로를 한 번에 실행한다. catalog가 없으면 Unity에서 `index_project_resources`를 호출하고, sidecar workflow로 resolved blueprint를 만든 뒤, Unity의 `apply_ui_blueprint` validate/apply까지 이어서 실행한다.",
+        description="Runs the first-success path end to end. If the catalog is missing, it calls `index_project_resources` in Unity, creates a resolved blueprint through the sidecar workflow, and continues through Unity `apply_ui_blueprint` validate/apply.",
         input_schema=_build_run_first_pass_ui_build_schema(),
         handler=run_first_pass_ui_build,
     ),
     ToolSpec(
         name="unity_rag.run_catalog_draft_ui_build",
-        description="reference 이미지가 없어도 catalog만으로 첫 UI draft를 만든다. popup shell/panel/icon/font를 검색해 draft blueprint를 만들고, 원하면 Unity의 `apply_ui_blueprint` validate/apply까지 이어서 실행한다.",
+        description="Builds a first UI draft from the catalog even without a reference image. Searches for shell, panel, icon, and font candidates, creates a draft blueprint, and can continue through Unity `apply_ui_blueprint` validate/apply.",
         input_schema=_build_run_catalog_draft_ui_build_schema(),
         handler=run_catalog_draft_ui_build,
     ),
     ToolSpec(
         name="unity_rag.extract_reference_layout",
-        description="레퍼런스 이미지에서 reference layout plan JSON을 추출한다. 처음 설정할 때는 `connection_preset=recommended_auto`를 고르는 것이 권장되고, Codex OAuth를 확실히 쓰고 싶으면 `codex_oauth`, 완전 오프라인 점검이면 `offline_local`을 고르면 된다.",
+        description="Extracts a reference layout plan JSON from a reference image. For first-time setup, `connection_preset=recommended_auto` is recommended; use `codex_oauth` to force Codex OAuth or `offline_local` for a fully offline check.",
         input_schema=_build_extract_reference_layout_schema(),
         handler=extract_reference_layout,
     ),
     ToolSpec(
         name="unity_rag.run_reference_to_resolved_blueprint",
-        description="레퍼런스 이미지 또는 기존 reference layout에서 시작해 resolved blueprint와 MCP handoff bundle까지 전체 workflow를 실행한다. 처음 설정할 때는 `connection_preset=recommended_auto`를 권장하며, OpenAI 키는 `openai_api_key`, Gemini 키는 `gemini_api_key`, Claude는 `claude_api_key` 또는 `claude_code`를 고르면 된다.",
+        description="Runs the full workflow from a reference image or existing reference layout through the resolved blueprint and MCP handoff bundle. For first-time setup, `connection_preset=recommended_auto` is recommended; use `openai_api_key`, `gemini_api_key`, `claude_api_key`, or `claude_code` when you want an explicit provider route.",
         input_schema=_build_run_reference_to_resolved_blueprint_schema(),
         handler=run_reference_to_resolved_blueprint,
     ),
