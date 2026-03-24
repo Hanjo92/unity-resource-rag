@@ -35,8 +35,9 @@ else:
 DEFAULT_UNITY_MCP_URL = "http://127.0.0.1:8080/mcp"
 DEFAULT_UNITY_MCP_TIMEOUT_MS = 3000
 DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
-EXPECTED_UNITY_TOOLS = ("index_project_resources", "query_ui_asset_catalog", "apply_ui_blueprint")
-EXPECTED_UNITY_RESOURCES = ("ui_asset_catalog",)
+REQUIRED_UNITY_BUILD_TOOLS = ("index_project_resources", "apply_ui_blueprint")
+OPTIONAL_UNITY_TOOLS = ("query_ui_asset_catalog",)
+OPTIONAL_UNITY_RESOURCES = ("ui_asset_catalog",)
 
 
 @dataclass(frozen=True)
@@ -450,21 +451,25 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         ]
     )
 
-    missing_tools = [tool for tool in EXPECTED_UNITY_TOOLS if tool not in tool_names]
+    missing_tools = [tool for tool in REQUIRED_UNITY_BUILD_TOOLS if tool not in tool_names]
+    missing_optional_tools = [tool for tool in OPTIONAL_UNITY_TOOLS if tool not in tool_names]
     missing_resources = [
         resource_name
-        for resource_name in EXPECTED_UNITY_RESOURCES
+        for resource_name in OPTIONAL_UNITY_RESOURCES
         if not any(resource_name in identifier for identifier in resource_ids)
     ]
-    project_scoped_symptom = "execute_custom_tool" in tool_names and missing_tools == list(EXPECTED_UNITY_TOOLS)
+    project_scoped_symptom = "execute_custom_tool" in tool_names and missing_tools == list(REQUIRED_UNITY_BUILD_TOOLS)
+    menu_bridge_fallback = "execute_menu_item" in tool_names and bool(missing_tools)
 
     details = {
         "unityMcpUrl": unity_mcp_url,
         "toolNames": tool_names,
         "resourceIdentifiers": resource_ids,
         "missingTools": missing_tools,
+        "missingOptionalTools": missing_optional_tools,
         "missingResources": missing_resources,
         "projectScopedSymptom": project_scoped_symptom,
+        "menuBridgeFallback": menu_bridge_fallback,
     }
 
     if project_scoped_symptom:
@@ -480,6 +485,18 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
         )
 
     if missing_tools:
+        if menu_bridge_fallback:
+            return DoctorCheck(
+                key="unity_mcp",
+                status="ok",
+                summary="Unity MCP does not expose the custom build tools directly, but the execute_menu_item fallback is available.",
+                details=details,
+                next_actions=[
+                    "You can continue with the Unity Resource RAG menu bridge fallback.",
+                    "If you want direct exposure later, keep checking `index_project_resources` and `apply_ui_blueprint` in the tool list.",
+                ],
+            )
+
         return DoctorCheck(
             key="unity_mcp",
             status="warn",
@@ -491,22 +508,22 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
             ],
         )
 
-    if missing_resources:
+    if missing_optional_tools or missing_resources:
         return DoctorCheck(
             key="unity_mcp",
-            status="warn",
-            summary="Unity MCP tools are visible, but the `ui_asset_catalog` resource was not found.",
+            status="ok",
+            summary="Unity MCP exposes the required build tools. Optional catalog browsing endpoints are not fully visible.",
             details=details,
             next_actions=[
-                "Check whether `ui_asset_catalog` is exposed in the resource list.",
-                "Restart the Unity MCP Local HTTP Server after the package finishes loading.",
+                "You can continue with build/apply even if `query_ui_asset_catalog` or `ui_asset_catalog` is not exposed.",
+                "If you want catalog browsing support, check whether `query_ui_asset_catalog` and `ui_asset_catalog` are exposed after restarting the Local HTTP Server.",
             ],
         )
 
     return DoctorCheck(
         key="unity_mcp",
         status="ok",
-        summary="Unity MCP is directly exposing the required custom tools and resources.",
+        summary="Unity MCP is directly exposing the required build tools.",
         details=details,
         next_actions=[],
     )

@@ -1,7 +1,9 @@
 using System.IO;
+using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityResourceRag.Editor.ResourceIndexing;
 
 namespace UnityResourceRag.Editor
 {
@@ -15,6 +17,7 @@ namespace UnityResourceRag.Editor
         private string _captureReport = string.Empty;
         private string _repairReport = string.Empty;
         private string _caseCaptureReport = string.Empty;
+        private string _catalogReport = string.Empty;
         private string _artifactActionReport = string.Empty;
         private string _buildPhase = "Idle";
         private string _caseName = string.Empty;
@@ -77,6 +80,7 @@ namespace UnityResourceRag.Editor
 
             EditorGUI.BeginChangeCheck();
             DrawReadinessSection(settings);
+            DrawCatalogSection(settings);
             DrawQuickSetupSection(settings);
             DrawBuildSection(settings);
             DrawFollowUpSection(settings);
@@ -207,6 +211,153 @@ namespace UnityResourceRag.Editor
             {
                 EditorGUILayout.HelpBox(_setupReport, MessageType.None);
             }
+        }
+
+        private void DrawCatalogSection(UnityResourceRagEditorSettings settings)
+        {
+            string catalogPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultCatalogRelativePath);
+            string manifestPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultManifestRelativePath);
+            string previewPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultPreviewRelativePath);
+
+            EditorGUILayout.Space(10f);
+            EditorGUILayout.LabelField("카탈로그 확인", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "생성된 카탈로그와 요약 파일, 미리보기 폴더를 여기서 바로 열 수 있습니다. 가장 먼저 manifest를 열어 recordCount와 assetCounts를 확인하는 걸 추천합니다.",
+                MessageType.None);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(_isReadinessRunning || _isBuildRunning || _isCaptureRunning || _isRepairRunning || _isBootstrapRunning))
+                {
+                    if (GUILayout.Button("카탈로그 재생성", GUILayout.Height(24f), GUILayout.Width(132f)))
+                    {
+                        RunCatalogReindex(settings);
+                    }
+                }
+
+                using (new EditorGUI.DisabledScope(_isReadinessRunning || _isBuildRunning || _isCaptureRunning || _isRepairRunning))
+                {
+                    if (GUILayout.Button("Readiness 새로고침", GUILayout.Height(24f), GUILayout.Width(132f)))
+                    {
+                        RunReadinessRefresh(settings);
+                    }
+                }
+
+                GUILayout.FlexibleSpace();
+            }
+
+            if (File.Exists(manifestPath))
+            {
+                try
+                {
+                    JObject manifest = JObject.Parse(File.ReadAllText(manifestPath));
+                    string generatedAt = manifest.Value<string>("generatedAtUtc");
+                    int recordCount = manifest.Value<int?>("recordCount") ?? 0;
+                    JObject assetCounts = manifest["assetCounts"] as JObject;
+
+                    using var box = new EditorGUILayout.VerticalScope("box");
+                    EditorGUILayout.LabelField("현재 카탈로그 요약", EditorStyles.boldLabel);
+                    if (!string.IsNullOrWhiteSpace(generatedAt))
+                    {
+                        EditorGUILayout.LabelField("생성 시각", generatedAt);
+                    }
+
+                    EditorGUILayout.LabelField("레코드 수", recordCount.ToString());
+                    if (assetCounts != null && assetCounts.Count > 0)
+                    {
+                        EditorGUILayout.LabelField("자산 개수", assetCounts.ToString(Newtonsoft.Json.Formatting.None));
+                    }
+                }
+                catch
+                {
+                    EditorGUILayout.HelpBox("manifest 파일은 있지만 요약을 읽는 데 실패했습니다. 파일을 직접 열어 확인해 주세요.", MessageType.Warning);
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("아직 생성된 catalog manifest가 없습니다. `Start UI Build` 또는 인덱싱 실행 후 다시 확인해 주세요.", MessageType.Warning);
+            }
+
+            if (!string.IsNullOrWhiteSpace(_catalogReport))
+            {
+                EditorGUILayout.HelpBox(_catalogReport, MessageType.None);
+            }
+
+            DrawArtifactActionRow("Manifest", manifestPath, allowPing: false);
+            DrawArtifactActionRow("Catalog JSONL", catalogPath, allowPing: false);
+            DrawArtifactActionRow("Preview Folder", previewPath, treatAsFolder: true, allowPing: false);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("경로 복사", GUILayout.Width(96f)))
+                {
+                    UnityResourceRagArtifactActions.CopyToClipboard(manifestPath);
+                    _artifactActionReport = "Manifest 경로를 클립보드에 복사했습니다.";
+                }
+
+                if (GUILayout.Button("프로젝트 루트 복사", GUILayout.Width(120f)))
+                {
+                    UnityResourceRagArtifactActions.CopyToClipboard(settings.UnityProjectPath);
+                    _artifactActionReport = "Unity 프로젝트 루트를 클립보드에 복사했습니다.";
+                }
+
+                GUILayout.FlexibleSpace();
+            }
+        }
+
+        private void RunCatalogReindex(UnityResourceRagEditorSettings settings)
+        {
+            _catalogReport = "카탈로그를 다시 생성하는 중입니다.";
+            Repaint();
+
+            EditorUtility.DisplayProgressBar("Unity Resource RAG", "카탈로그를 다시 생성하는 중...", 0.35f);
+            try
+            {
+                object result = IndexProjectResourcesTool.HandleCommand(new JObject());
+                if (result is SuccessResponse success)
+                {
+                    JObject payload = success.Data != null
+                        ? JObject.FromObject(success.Data)
+                        : new JObject();
+
+                    string catalogPath = payload.Value<string>("catalogPath") ?? ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultCatalogRelativePath);
+                    string manifestPath = payload.Value<string>("manifestPath") ?? ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultManifestRelativePath);
+                    string previewDirectory = payload.Value<string>("previewDirectory") ?? ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultPreviewRelativePath);
+                    int recordCount = payload.Value<int?>("recordCount") ?? 0;
+                    string assetCounts = (payload["assetCounts"] as JObject)?.ToString(Newtonsoft.Json.Formatting.None) ?? "{}";
+
+                    _catalogReport =
+                        "카탈로그 재생성 완료.\n" +
+                        $"- 레코드 수: {recordCount}\n" +
+                        $"- Catalog: {catalogPath}\n" +
+                        $"- Manifest: {manifestPath}\n" +
+                        $"- Previews: {previewDirectory}\n" +
+                        $"- Asset Counts: {assetCounts}";
+
+                    Debug.Log("[Unity Resource RAG] 카탈로그 재생성 완료");
+                }
+                else if (result is ErrorResponse error)
+                {
+                    _catalogReport = "카탈로그 재생성 실패.\n" + (string.IsNullOrWhiteSpace(error.Error) ? "알 수 없는 오류입니다." : error.Error);
+                    Debug.LogError("[Unity Resource RAG] " + _catalogReport);
+                }
+                else
+                {
+                    _catalogReport = "카탈로그 재생성 응답 형식을 확인하지 못했습니다.";
+                    Debug.LogWarning("[Unity Resource RAG] " + _catalogReport);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                _catalogReport = "카탈로그 재생성 중 예외가 발생했습니다.\n" + ex.Message;
+                Debug.LogError("[Unity Resource RAG] " + ex);
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+
+            RunReadinessRefresh(settings);
         }
 
         private void DrawBuildSection(UnityResourceRagEditorSettings settings)

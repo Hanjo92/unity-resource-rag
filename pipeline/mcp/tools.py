@@ -5,6 +5,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -41,6 +43,9 @@ PIPELINE_ROOT = REPO_ROOT / "pipeline"
 DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl")
 DEFAULT_DRAFT_OUTPUT_RELATIVE_PATH = Path("Library/ResourceRag/Drafts")
 DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS = 30000
+DEFAULT_MENU_BRIDGE_REQUEST_RELATIVE_PATH = Path("Library/ResourceRag/Interop/menu_tool_request.json")
+DEFAULT_MENU_BRIDGE_RESPONSE_RELATIVE_PATH = Path("Library/ResourceRag/Interop/menu_tool_response.json")
+UNITY_RAG_MENU_BRIDGE_PATH = "Tools/Unity Resource RAG/Interop/대기 요청 실행"
 
 PROVIDER_DESCRIPTION = (
     "Select the extraction provider. "
@@ -1542,6 +1547,7 @@ def _call_unity_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
     timeout_ms: int,
+    unity_project_path: Path | None = None,
 ) -> dict[str, Any]:
     if tool_name in available_tools:
         request_name = tool_name
@@ -1554,6 +1560,14 @@ def _call_unity_mcp_tool(
             "parameters": arguments,
         }
         invocation_mode = "execute_custom_tool"
+    elif "execute_menu_item" in available_tools and unity_project_path is not None:
+        return _call_unity_menu_bridge_tool(
+            unity_mcp_url=unity_mcp_url,
+            tool_name=tool_name,
+            arguments=arguments,
+            timeout_ms=timeout_ms,
+            unity_project_path=unity_project_path,
+        )
     else:
         raise ToolExecutionError(
             f"Unity MCP does not expose `{tool_name}`.",
@@ -1580,6 +1594,91 @@ def _call_unity_mcp_tool(
         "requestName": request_name,
         "response": payload,
     }
+
+
+def _call_unity_menu_bridge_tool(
+    unity_mcp_url: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    timeout_ms: int,
+    unity_project_path: Path,
+) -> dict[str, Any]:
+    request_id = uuid.uuid4().hex
+    interop_dir = unity_project_path / "Library" / "ResourceRag" / "Interop"
+    request_path = unity_project_path / DEFAULT_MENU_BRIDGE_REQUEST_RELATIVE_PATH
+    response_path = unity_project_path / DEFAULT_MENU_BRIDGE_RESPONSE_RELATIVE_PATH
+    interop_dir.mkdir(parents=True, exist_ok=True)
+
+    request_payload = {
+        "requestId": request_id,
+        "toolName": tool_name,
+        "parameters": arguments,
+    }
+    request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    client = get_unity_http_client(unity_mcp_url, timeout_ms)
+    result = client.request(
+        "tools/call",
+        {
+            "name": "execute_menu_item",
+            "arguments": {
+                "menu_path": UNITY_RAG_MENU_BRIDGE_PATH,
+            },
+        },
+        99,
+    )
+    payload = _decode_mcp_tool_result(result.get("result", result))
+    if payload.get("success") is False:
+        raise ToolExecutionError(
+            "Unity 메뉴 브리지 실행 요청에 실패했습니다.",
+            details={"unityResponse": payload},
+        )
+
+    deadline = time.monotonic() + max(timeout_ms / 1000.0, 1.0)
+    while time.monotonic() < deadline:
+        if response_path.exists():
+            try:
+                response_payload = json.loads(response_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                response_payload = None
+
+            if isinstance(response_payload, dict) and response_payload.get("requestId") == request_id:
+                if not response_payload.get("success", False):
+                    raise ToolExecutionError(
+                        f"Unity 메뉴 브리지 `{tool_name}` 실행에 실패했습니다.",
+                        details={"bridgeResponse": response_payload},
+                    )
+
+                tool_payload = response_payload.get("payload")
+                if not isinstance(tool_payload, dict):
+                    raise ToolExecutionError(
+                        "Unity 메뉴 브리지가 예상하지 못한 응답 형식을 반환했습니다.",
+                        details={"bridgeResponse": response_payload},
+                    )
+
+                if tool_payload.get("success") is False:
+                    raise ToolExecutionError(
+                        f"Unity tool `{tool_name}` failed: {tool_payload.get('error') or tool_payload.get('message') or 'unknown error'}",
+                        details={"unityResponse": tool_payload, "invocationMode": "menu_bridge"},
+                    )
+
+                return {
+                    "tool": tool_name,
+                    "invocationMode": "menu_bridge",
+                    "requestName": "execute_menu_item",
+                    "response": tool_payload,
+                }
+
+        time.sleep(0.25)
+
+    raise ToolExecutionError(
+        f"Unity 메뉴 브리지 `{tool_name}` 응답 대기 시간이 초과되었습니다.",
+        details={
+            "requestId": request_id,
+            "requestPath": str(request_path),
+            "responsePath": str(response_path),
+        },
+    )
 
 
 def extract_reference_layout(args: dict[str, Any]) -> dict[str, Any]:
@@ -1740,6 +1839,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
             "index_project_resources",
             {"outputPath": str(catalog_path)},
             unity_mcp_timeout_ms,
+            unity_project_path=unity_project_path,
         )
 
     workflow_args = dict(args)
@@ -1779,6 +1879,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
                 "apply_ui_blueprint",
                 {"action": "validate", "blueprintPath": resolved_blueprint},
                 unity_mcp_timeout_ms,
+                unity_project_path=unity_project_path,
             )
         apply_result = _call_unity_mcp_tool(
             unity_mcp_url,
@@ -1786,6 +1887,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
             "apply_ui_blueprint",
             {"action": "apply", "blueprintPath": resolved_blueprint},
             unity_mcp_timeout_ms,
+            unity_project_path=unity_project_path,
         )
 
     next_actions: list[str] = []
@@ -1855,6 +1957,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
             "index_project_resources",
             {"outputPath": str(catalog_path)},
             unity_mcp_timeout_ms,
+            unity_project_path=unity_project_path,
         )
 
     if not catalog_path.exists():
@@ -2033,6 +2136,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
                 "apply_ui_blueprint",
                 {"action": "validate", "blueprintPath": str(blueprint_path)},
                 unity_mcp_timeout_ms,
+                unity_project_path=unity_project_path,
             )
         apply_result = _call_unity_mcp_tool(
             unity_mcp_url,
@@ -2040,6 +2144,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
             "apply_ui_blueprint",
             {"action": "apply", "blueprintPath": str(blueprint_path)},
             unity_mcp_timeout_ms,
+            unity_project_path=unity_project_path,
         )
 
     verify_request = ((handoff_bundle or {}).get("requests") or {}).get("verify")

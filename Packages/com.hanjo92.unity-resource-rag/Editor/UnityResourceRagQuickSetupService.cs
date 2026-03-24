@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using MCPForUnity.Editor.Helpers;
 using MCPForUnity.Editor.Services;
 using UnityEditor;
@@ -22,6 +23,8 @@ namespace UnityResourceRag.Editor
         private const string ProjectScopedToolsLocalHttpKey = "MCPForUnity.ProjectScopedTools.LocalHttp";
         private const string CustomToolRegistrationEnabledKey = "MCPForUnity.CustomToolRegistrationEnabled";
         private const string AutoRegisterEnabledKey = "MCPForUnity.AutoRegisterEnabled";
+        private const int BridgeWarmupMaxAttempts = 8;
+        private const int BridgeWarmupRetryDelayMs = 1000;
         private static readonly string[] ExpectedTools = { "index_project_resources", "query_ui_asset_catalog", "apply_ui_blueprint" };
         private static readonly string[] ExpectedResources = { "ui_asset_catalog" };
         private static bool _bridgeWarmupScheduled;
@@ -126,7 +129,7 @@ namespace UnityResourceRag.Editor
             }
 
             server.StopManagedLocalHttpServer();
-            bool started = server.StartLocalHttpServer(true);
+            bool started = server.StartLocalHttpServer();
             if (!started && !server.IsLocalHttpServerReachable())
             {
                 result.Errors.Add("Failed to start the Unity MCP Local HTTP Server.");
@@ -219,24 +222,37 @@ namespace UnityResourceRag.Editor
 
         private static async void StartBridgeWarmupAsync()
         {
+            string lastMessage = "브리지 시작 전입니다.";
             try
             {
-                bool started = await MCPServiceLocator.Bridge.StartAsync();
-                if (!started)
+                for (int attempt = 1; attempt <= BridgeWarmupMaxAttempts; attempt++)
                 {
-                    Debug.LogWarning("[Unity Resource RAG] MCP bridge start did not complete. If tools stay unavailable, press Start Bridge once in the Unity MCP window.");
-                    return;
+                    bool started = await MCPServiceLocator.Bridge.StartAsync();
+                    if (!started)
+                    {
+                        lastMessage = $"브리지 시작 실패 (시도 {attempt}/{BridgeWarmupMaxAttempts}).";
+                    }
+                    else
+                    {
+                        BridgeVerificationResult verification = await MCPServiceLocator.Bridge.VerifyAsync();
+                        if (verification.Success)
+                        {
+                            Debug.Log($"[Unity Resource RAG] MCP bridge warmup completed successfully on attempt {attempt}.");
+                            return;
+                        }
+
+                        lastMessage = string.IsNullOrWhiteSpace(verification.Message)
+                            ? $"브리지 검증 미완료 (시도 {attempt}/{BridgeWarmupMaxAttempts})."
+                            : $"브리지 검증 미완료 (시도 {attempt}/{BridgeWarmupMaxAttempts}): {verification.Message}";
+                    }
+
+                    if (attempt < BridgeWarmupMaxAttempts)
+                    {
+                        await Task.Delay(BridgeWarmupRetryDelayMs);
+                    }
                 }
 
-                BridgeVerificationResult verification = await MCPServiceLocator.Bridge.VerifyAsync();
-                if (verification.Success)
-                {
-                    Debug.Log("[Unity Resource RAG] MCP bridge warmup completed successfully.");
-                }
-                else
-                {
-                    Debug.LogWarning("[Unity Resource RAG] MCP bridge started, but verification is incomplete: " + verification.Message);
-                }
+                Debug.LogWarning("[Unity Resource RAG] MCP bridge warmup did not complete after retries. " + lastMessage);
             }
             catch (Exception ex)
             {
