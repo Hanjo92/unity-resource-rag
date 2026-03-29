@@ -2,11 +2,18 @@
 import argparse
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from vector_index import load_jsonl, load_vector_index, score_query_against_index
+if __package__ in (None, ""):
+    retrieval_dir = Path(__file__).resolve().parent
+    if str(retrieval_dir) not in sys.path:
+        sys.path.insert(0, str(retrieval_dir))
+    from vector_index import load_jsonl, load_vector_index, score_query_against_index
+else:
+    from .vector_index import load_jsonl, load_vector_index, score_query_against_index
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 

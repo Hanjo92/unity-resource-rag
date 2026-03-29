@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from search_catalog import Query, resolve_vector_index_path, search
-from vector_index import load_jsonl, load_vector_index, score_query_against_index
+if __package__ in (None, ""):
+    retrieval_dir = Path(__file__).resolve().parent
+    if str(retrieval_dir) not in sys.path:
+        sys.path.insert(0, str(retrieval_dir))
+    from search_catalog import Query, resolve_vector_index_path, search
+    from vector_index import load_jsonl, load_vector_index, score_query_against_index
+else:
+    from .search_catalog import Query, resolve_vector_index_path, search
+    from .vector_index import load_jsonl, load_vector_index, score_query_against_index
 
 
 BINDING_STATE_AUTO_BIND = "auto_bind"

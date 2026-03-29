@@ -129,6 +129,35 @@ class DoctorToolTests(unittest.TestCase):
         self.assertEqual(checks["catalog"]["status"], "warn")
         self.assertIn("index_project_resources", " ".join(payload["nextActions"]))
 
+    def test_doctor_build_scope_skips_resource_inventory(self) -> None:
+        temp_dir, project_path = _make_unity_project(with_catalog=True)
+        self.addCleanup(temp_dir.cleanup)
+
+        observed_methods: list[str] = []
+
+        def fake_post_json_rpc(url: str, method: str, params: dict[str, object] | None, timeout_ms: int, request_id: int) -> dict[str, object]:
+            observed_methods.append(method)
+            if method == "tools/list":
+                return {"tools": [{"name": "index_project_resources"}, {"name": "apply_ui_blueprint"}]}
+            raise AssertionError(f"Unexpected method: {method}")
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with mock.patch("pipeline.mcp.doctor._post_json_rpc", side_effect=fake_post_json_rpc):
+                result = doctor_tool(
+                    {
+                        "unity_project_path": str(project_path),
+                        "connection_preset": "offline_local",
+                        "doctor_scope": "build",
+                    }
+                )
+
+        payload = _doctor_payload(result)
+        checks = {item["key"]: item for item in payload["checks"]}
+        self.assertEqual(observed_methods, ["tools/list"])
+        self.assertEqual(checks["unity_mcp"]["status"], "ok")
+        self.assertEqual(checks["unity_mcp"]["details"]["scope"], "build")
+        self.assertEqual(checks["unity_mcp"]["details"]["missingResources"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,15 @@ if __package__ in (None, ""):
         ProviderConfig,
         inspect_provider_setup as inspect_provider_setup_config,
     )
+    from pipeline.retrieval.search_catalog import (
+        Query as CatalogSearchQuery,
+        resolve_vector_index_path as resolve_catalog_vector_index_path,
+        search as search_catalog_records,
+    )
+    from pipeline.retrieval.vector_index import (
+        load_vector_index as load_retrieval_vector_index,
+        score_query_against_index as score_query_against_retrieval_index,
+    )
 else:
     from .doctor import DEFAULT_UNITY_MCP_TIMEOUT_MS, DEFAULT_UNITY_MCP_URL, build_doctor_payload
     from .unity_http import UnityMcpHttpError, get_unity_http_client
@@ -35,6 +44,15 @@ else:
         DEFAULT_MODEL,
         ProviderConfig,
         inspect_provider_setup as inspect_provider_setup_config,
+    )
+    from ..retrieval.search_catalog import (
+        Query as CatalogSearchQuery,
+        resolve_vector_index_path as resolve_catalog_vector_index_path,
+        search as search_catalog_records,
+    )
+    from ..retrieval.vector_index import (
+        load_vector_index as load_retrieval_vector_index,
+        score_query_against_index as score_query_against_retrieval_index,
     )
 
 
@@ -625,6 +643,43 @@ def _save_json(path: Path, payload: Any) -> None:
         handle.write("\n")
 
 
+def _load_vector_index_payload(vector_index_path: Path | None) -> dict[str, Any] | None:
+    if vector_index_path is None or not vector_index_path.exists():
+        return None
+    return load_retrieval_vector_index(vector_index_path)
+
+
+def _normalize_available_tools_hint(raw_tools: Any) -> list[str] | None:
+    if not isinstance(raw_tools, list):
+        return None
+
+    normalized = sorted(
+        str(item)
+        for item in raw_tools
+        if isinstance(item, str) and item.strip()
+    )
+    return normalized or None
+
+
+def _extract_unity_tool_names_from_doctor(doctor_payload: dict[str, Any] | None) -> list[str] | None:
+    if not isinstance(doctor_payload, dict):
+        return None
+
+    checks = doctor_payload.get("checks") or []
+    if not isinstance(checks, list):
+        return None
+
+    for check in checks:
+        if not isinstance(check, dict) or check.get("key") != "unity_mcp":
+            continue
+        details = check.get("details") or {}
+        if not isinstance(details, dict):
+            continue
+        return _normalize_available_tools_hint(details.get("toolNames"))
+
+    return None
+
+
 def _search_catalog_records(
     catalog_path: Path,
     query_text: str,
@@ -634,7 +689,30 @@ def _search_catalog_records(
     aspect_ratio: float | None = None,
     vector_index_path: Path | None = None,
     top_k: int = 5,
+    records: list[dict[str, Any]] | None = None,
+    vector_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if records is not None:
+        query = CatalogSearchQuery(
+            query_text=query_text,
+            region_type=region_type,
+            preferred_kind=preferred_kind,
+            aspect_ratio=aspect_ratio,
+            top_k=max(1, top_k),
+        )
+        vector_scores = None
+        if vector_index is not None:
+            vector_scores = score_query_against_retrieval_index(query_text, vector_index)
+
+        return {
+            "query": query_text,
+            "regionType": region_type,
+            "preferredKind": preferred_kind,
+            "aspectRatio": aspect_ratio,
+            "vectorIndex": str(vector_index_path) if vector_index_path else None,
+            "results": search_catalog_records(query, records, vector_scores),
+        }
+
     args = [
         str(catalog_path),
         "--query",
@@ -1824,7 +1902,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
     unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
     unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS)
-    available_tools: list[str] | None = None
+    available_tools = _normalize_available_tools_hint(args.get("available_tools_hint"))
 
     if force_reindex or not catalog_path.exists() or apply_in_unity:
         available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
@@ -1942,7 +2020,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
     unity_mcp_url = str(args.get("unity_mcp_url") or DEFAULT_UNITY_MCP_URL)
     unity_mcp_timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_OPERATION_TIMEOUT_MS)
-    available_tools: list[str] | None = None
+    available_tools = _normalize_available_tools_hint(args.get("available_tools_hint"))
 
     if force_reindex or not catalog_path.exists() or apply_in_unity:
         available_tools = _list_unity_mcp_tools(unity_mcp_url, unity_mcp_timeout_ms)
@@ -1967,6 +2045,8 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         )
 
     records = _load_jsonl_records(catalog_path)
+    resolved_vector_index_path = resolve_catalog_vector_index_path(catalog_path, vector_index_path)
+    vector_index = _load_vector_index_payload(resolved_vector_index_path)
     records_by_id = {
         str(record.get("id")): record
         for record in records
@@ -1980,8 +2060,10 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         str(args.get("shell_query") or query_defaults["shell"]),
         preferred_kind="prefab",
         region_type="popup_frame",
-        vector_index_path=vector_index_path,
+        vector_index_path=resolved_vector_index_path,
         top_k=5,
+        records=records,
+        vector_index=vector_index,
     )
     panel_search = _search_catalog_records(
         catalog_path,
@@ -1989,8 +2071,10 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         preferred_kind="sprite",
         region_type="popup_frame",
         aspect_ratio=920.0 / 640.0,
-        vector_index_path=vector_index_path,
+        vector_index_path=resolved_vector_index_path,
         top_k=5,
+        records=records,
+        vector_index=vector_index,
     )
     icon_search = _search_catalog_records(
         catalog_path,
@@ -1998,22 +2082,28 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         preferred_kind="sprite",
         region_type="icon",
         aspect_ratio=1.0,
-        vector_index_path=vector_index_path,
+        vector_index_path=resolved_vector_index_path,
         top_k=5,
+        records=records,
+        vector_index=vector_index,
     )
     title_font_search = _search_catalog_records(
         catalog_path,
         str(args.get("title_font_query") or query_defaults["title_font"]),
         preferred_kind="tmp_font",
-        vector_index_path=vector_index_path,
+        vector_index_path=resolved_vector_index_path,
         top_k=5,
+        records=records,
+        vector_index=vector_index,
     )
     body_font_search = _search_catalog_records(
         catalog_path,
         str(args.get("body_font_query") or query_defaults["body_font"]),
         preferred_kind="tmp_font",
-        vector_index_path=vector_index_path,
+        vector_index_path=resolved_vector_index_path,
         top_k=5,
+        records=records,
+        vector_index=vector_index,
     )
 
     shell_candidate, shell_record = _select_catalog_candidate(
@@ -2098,7 +2188,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
             "goal": goal,
             "templateMode": template_mode,
             "catalogPath": str(catalog_path),
-            "vectorIndex": str(vector_index_path) if vector_index_path else None,
+            "vectorIndex": str(resolved_vector_index_path) if resolved_vector_index_path else None,
             "selectedAssets": {
                 "shellPrefab": shell_candidate,
                 "panelSprite": panel_candidate,
@@ -2199,7 +2289,9 @@ def start_ui_build(args: dict[str, Any]) -> dict[str, Any]:
 
     run_doctor = bool(args.get("run_doctor", True))
     require_doctor_ok = bool(args.get("require_doctor_ok", True))
-    doctor_payload = build_doctor_payload(args) if run_doctor else None
+    doctor_args = dict(args)
+    doctor_args.setdefault("doctor_scope", "build")
+    doctor_payload = build_doctor_payload(doctor_args) if run_doctor else None
     if doctor_payload is not None and require_doctor_ok and doctor_payload.get("overallStatus") == "error":
         raise ToolExecutionError(
             "Doctor detected blocking setup issues before starting the UI build.",
@@ -2215,6 +2307,9 @@ def start_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     )
 
     route_args = dict(args)
+    available_tools_hint = _extract_unity_tool_names_from_doctor(doctor_payload)
+    if available_tools_hint is not None:
+        route_args["available_tools_hint"] = available_tools_hint
     if route == "catalog_draft":
         inferred_goal = (
             str(route_args.get("goal") or "").strip()

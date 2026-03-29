@@ -76,7 +76,14 @@ class StartUiBuildToolTests(unittest.TestCase):
         doctor_payload = {
             "overallStatus": "ok",
             "nextActions": [],
-            "checks": [],
+            "checks": [
+                {
+                    "key": "unity_mcp",
+                    "details": {
+                        "toolNames": ["apply_ui_blueprint", "index_project_resources"],
+                    },
+                }
+            ],
         }
         catalog_payload = {
             "templateMode": "list",
@@ -110,6 +117,7 @@ class StartUiBuildToolTests(unittest.TestCase):
         called_args = catalog_mock.call_args.args[0]
         self.assertEqual(called_args["goal"], "Night Shift Shop")
         self.assertEqual(called_args["template_mode"], "list")
+        self.assertEqual(called_args["available_tools_hint"], ["apply_ui_blueprint", "index_project_resources"])
 
     def test_start_ui_build_stops_when_doctor_reports_error(self) -> None:
         doctor_payload = {

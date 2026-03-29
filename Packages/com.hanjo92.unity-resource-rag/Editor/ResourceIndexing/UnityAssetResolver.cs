@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -10,6 +11,17 @@ namespace UnityResourceRag.Editor.ResourceIndexing
     /// </summary>
     public static class UnityAssetResolver
     {
+        private static readonly Dictionary<string, ResolvedAssetCacheEntry> ResolvedAssetCache = new Dictionary<string, ResolvedAssetCacheEntry>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, UnityEngine.Object[]> SubAssetCache = new Dictionary<string, UnityEngine.Object[]>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, UnityEngine.Object> PrimaryAssetCache = new Dictionary<string, UnityEngine.Object>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>(StringComparer.Ordinal);
+
+        private sealed class ResolvedAssetCacheEntry
+        {
+            public string AssetPath { get; set; }
+            public UnityEngine.Object Asset { get; set; }
+        }
+
         public static bool TryResolve(UiAssetReference reference, out UnityEngine.Object asset, out string assetPath, out string error)
         {
             asset = null;
@@ -22,6 +34,19 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 return false;
             }
 
+            string cacheKey = BuildReferenceCacheKey(reference);
+            if (ResolvedAssetCache.TryGetValue(cacheKey, out ResolvedAssetCacheEntry cachedEntry) && cachedEntry != null)
+            {
+                if (cachedEntry.Asset != null)
+                {
+                    asset = cachedEntry.Asset;
+                    assetPath = cachedEntry.AssetPath;
+                    return true;
+                }
+
+                ResolvedAssetCache.Remove(cacheKey);
+            }
+
             assetPath = ResolveAssetPath(reference);
             if (string.IsNullOrWhiteSpace(assetPath))
             {
@@ -31,7 +56,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
 
             if (!string.IsNullOrWhiteSpace(reference.subAssetName) || (reference.localFileId.HasValue && reference.localFileId.Value != 0))
             {
-                UnityEngine.Object[] subAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+                UnityEngine.Object[] subAssets = LoadSubAssets(assetPath);
                 asset = subAssets.FirstOrDefault(candidate => MatchesSubAsset(candidate, reference));
             }
 
@@ -46,6 +71,11 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 return false;
             }
 
+            ResolvedAssetCache[cacheKey] = new ResolvedAssetCacheEntry
+            {
+                AssetPath = assetPath,
+                Asset = asset
+            };
             return true;
         }
 
@@ -130,6 +160,39 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             return null;
         }
 
+        private static string BuildReferenceCacheKey(UiAssetReference reference)
+        {
+            return string.Join(
+                "|",
+                reference.kind ?? string.Empty,
+                reference.guid ?? string.Empty,
+                reference.path ?? string.Empty,
+                reference.localFileId?.ToString() ?? string.Empty,
+                reference.subAssetName ?? string.Empty);
+        }
+
+        private static UnityEngine.Object[] LoadSubAssets(string assetPath)
+        {
+            if (string.IsNullOrWhiteSpace(assetPath))
+            {
+                return Array.Empty<UnityEngine.Object>();
+            }
+
+            if (SubAssetCache.TryGetValue(assetPath, out UnityEngine.Object[] cachedAssets))
+            {
+                if (cachedAssets != null && cachedAssets.Any(candidate => candidate != null))
+                {
+                    return cachedAssets;
+                }
+
+                SubAssetCache.Remove(assetPath);
+            }
+
+            UnityEngine.Object[] loadedAssets = AssetDatabase.LoadAllAssetsAtPath(assetPath) ?? Array.Empty<UnityEngine.Object>();
+            SubAssetCache[assetPath] = loadedAssets;
+            return loadedAssets;
+        }
+
         private static bool MatchesSubAsset(UnityEngine.Object candidate, UiAssetReference reference)
         {
             if (candidate == null)
@@ -159,25 +222,37 @@ namespace UnityResourceRag.Editor.ResourceIndexing
 
         private static UnityEngine.Object LoadPrimaryAsset(string assetPath, string kind)
         {
+            string cacheKey = string.Concat(kind ?? string.Empty, "|", assetPath ?? string.Empty);
+            if (PrimaryAssetCache.TryGetValue(cacheKey, out UnityEngine.Object cachedAsset))
+            {
+                if (cachedAsset != null)
+                {
+                    return cachedAsset;
+                }
+
+                PrimaryAssetCache.Remove(cacheKey);
+            }
+
+            UnityEngine.Object resolvedAsset = null;
             if (string.Equals(kind, "sprite", StringComparison.OrdinalIgnoreCase))
             {
                 Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
                 if (sprite != null)
                 {
-                    return sprite;
+                    resolvedAsset = sprite;
                 }
             }
 
-            if (string.Equals(kind, "prefab", StringComparison.OrdinalIgnoreCase))
+            if (resolvedAsset == null && string.Equals(kind, "prefab", StringComparison.OrdinalIgnoreCase))
             {
                 GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
                 if (prefab != null)
                 {
-                    return prefab;
+                    resolvedAsset = prefab;
                 }
             }
 
-            if (string.Equals(kind, "tmp_font", StringComparison.OrdinalIgnoreCase))
+            if (resolvedAsset == null && string.Equals(kind, "tmp_font", StringComparison.OrdinalIgnoreCase))
             {
                 Type tmpFontType = ResolveType("TMPro.TMP_FontAsset");
                 if (tmpFontType != null)
@@ -185,19 +260,40 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                     UnityEngine.Object font = AssetDatabase.LoadAssetAtPath(assetPath, tmpFontType);
                     if (font != null)
                     {
-                        return font;
+                        resolvedAsset = font;
                     }
                 }
             }
 
-            return AssetDatabase.LoadMainAssetAtPath(assetPath);
+            if (resolvedAsset == null)
+            {
+                resolvedAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
+            }
+
+            if (resolvedAsset != null)
+            {
+                PrimaryAssetCache[cacheKey] = resolvedAsset;
+            }
+
+            return resolvedAsset;
         }
 
         private static Type ResolveType(string typeName)
         {
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
+                return null;
+            }
+
+            if (TypeCache.TryGetValue(typeName, out Type cachedType))
+            {
+                return cachedType;
+            }
+
             Type resolved = Type.GetType(typeName);
             if (resolved != null)
             {
+                TypeCache[typeName] = resolved;
                 return resolved;
             }
 
@@ -206,10 +302,12 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 resolved = assembly.GetType(typeName);
                 if (resolved != null)
                 {
+                    TypeCache[typeName] = resolved;
                     return resolved;
                 }
             }
 
+            TypeCache[typeName] = null;
             return null;
         }
     }

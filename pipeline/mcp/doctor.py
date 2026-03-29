@@ -38,6 +38,8 @@ DEFAULT_CATALOG_RELATIVE_PATH = Path("Library/ResourceRag/resource_catalog.jsonl
 REQUIRED_UNITY_BUILD_TOOLS = ("index_project_resources", "apply_ui_blueprint")
 OPTIONAL_UNITY_TOOLS = ("query_ui_asset_catalog",)
 OPTIONAL_UNITY_RESOURCES = ("ui_asset_catalog",)
+DOCTOR_SCOPE_FULL = "full"
+DOCTOR_SCOPE_BUILD = "build"
 
 
 @dataclass(frozen=True)
@@ -422,10 +424,15 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
 
     unity_mcp_url = str(raw_url or DEFAULT_UNITY_MCP_URL)
     timeout_ms = int(args.get("unity_mcp_timeout_ms") or DEFAULT_UNITY_MCP_TIMEOUT_MS)
+    scope = str(args.get("doctor_scope") or DOCTOR_SCOPE_FULL).strip().lower() or DOCTOR_SCOPE_FULL
 
     try:
         tools_result = _post_json_rpc(unity_mcp_url, "tools/list", {}, timeout_ms, 1)
-        resources_result = _post_json_rpc(unity_mcp_url, "resources/list", {}, timeout_ms, 2)
+        resources_result = (
+            _post_json_rpc(unity_mcp_url, "resources/list", {}, timeout_ms, 2)
+            if scope != DOCTOR_SCOPE_BUILD
+            else {"resources": []}
+        )
     except Exception as exc:
         return DoctorCheck(
             key="unity_mcp",
@@ -452,16 +459,17 @@ def _check_unity_mcp(args: dict[str, Any], project_path: Path | None) -> DoctorC
     )
 
     missing_tools = [tool for tool in REQUIRED_UNITY_BUILD_TOOLS if tool not in tool_names]
-    missing_optional_tools = [tool for tool in OPTIONAL_UNITY_TOOLS if tool not in tool_names]
+    missing_optional_tools = [tool for tool in OPTIONAL_UNITY_TOOLS if tool not in tool_names] if scope != DOCTOR_SCOPE_BUILD else []
     missing_resources = [
         resource_name
         for resource_name in OPTIONAL_UNITY_RESOURCES
         if not any(resource_name in identifier for identifier in resource_ids)
-    ]
+    ] if scope != DOCTOR_SCOPE_BUILD else []
     project_scoped_symptom = "execute_custom_tool" in tool_names and missing_tools == list(REQUIRED_UNITY_BUILD_TOOLS)
     menu_bridge_fallback = "execute_menu_item" in tool_names and bool(missing_tools)
 
     details = {
+        "scope": scope,
         "unityMcpUrl": unity_mcp_url,
         "toolNames": tool_names,
         "resourceIdentifiers": resource_ids,

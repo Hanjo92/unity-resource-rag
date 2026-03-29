@@ -29,6 +29,9 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             "image",
             "tmp_text"
         };
+        private static readonly Dictionary<string, Type> TypeCache = new Dictionary<string, Type>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, PropertyInfo> PropertyCache = new Dictionary<string, PropertyInfo>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, FieldInfo> FieldCache = new Dictionary<string, FieldInfo>(StringComparer.Ordinal);
 
         public sealed class Parameters
         {
@@ -734,9 +737,20 @@ namespace UnityResourceRag.Editor.ResourceIndexing
 
         private static Type ResolveType(string typeName)
         {
+            if (string.IsNullOrWhiteSpace(typeName))
+            {
+                return null;
+            }
+
+            if (TypeCache.TryGetValue(typeName, out Type cachedType))
+            {
+                return cachedType;
+            }
+
             Type resolved = Type.GetType(typeName);
             if (resolved != null)
             {
+                TypeCache[typeName] = resolved;
                 return resolved;
             }
 
@@ -746,10 +760,12 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 resolved = assemblies[i].GetType(typeName);
                 if (resolved != null)
                 {
+                    TypeCache[typeName] = resolved;
                     return resolved;
                 }
             }
 
+            TypeCache[typeName] = null;
             return null;
         }
 
@@ -760,7 +776,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 return;
             }
 
-            PropertyInfo property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            PropertyInfo property = GetCachedProperty(target.GetType(), propertyName, BindingFlags.Public | BindingFlags.Instance);
             if (property != null && property.CanWrite)
             {
                 property.SetValue(target, value);
@@ -788,14 +804,14 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             }
 
             Type type = target.GetType();
-            PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            PropertyInfo property = GetCachedProperty(type, propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
             if (property != null && property.CanWrite && TryConvertToken(token, property.PropertyType, out object propertyValue))
             {
                 property.SetValue(target, propertyValue);
                 return;
             }
 
-            FieldInfo field = type.GetField(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            FieldInfo field = GetCachedField(type, propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
             if (field != null && TryConvertToken(token, field.FieldType, out object fieldValue))
             {
                 field.SetValue(target, fieldValue);
@@ -809,7 +825,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 return;
             }
 
-            PropertyInfo property = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            PropertyInfo property = GetCachedProperty(target.GetType(), propertyName, BindingFlags.Public | BindingFlags.Instance);
             if (property == null || !property.CanWrite || !property.PropertyType.IsEnum)
             {
                 return;
@@ -824,6 +840,42 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             {
                 // Ignore invalid enum values so blueprint validation can evolve independently.
             }
+        }
+
+        private static PropertyInfo GetCachedProperty(Type type, string propertyName, BindingFlags flags)
+        {
+            if (type == null || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return null;
+            }
+
+            string cacheKey = string.Concat(type.AssemblyQualifiedName, "|", propertyName, "|", ((int)flags).ToString());
+            if (PropertyCache.TryGetValue(cacheKey, out PropertyInfo cachedProperty))
+            {
+                return cachedProperty;
+            }
+
+            PropertyInfo property = type.GetProperty(propertyName, flags);
+            PropertyCache[cacheKey] = property;
+            return property;
+        }
+
+        private static FieldInfo GetCachedField(Type type, string fieldName, BindingFlags flags)
+        {
+            if (type == null || string.IsNullOrWhiteSpace(fieldName))
+            {
+                return null;
+            }
+
+            string cacheKey = string.Concat(type.AssemblyQualifiedName, "|", fieldName, "|", ((int)flags).ToString());
+            if (FieldCache.TryGetValue(cacheKey, out FieldInfo cachedField))
+            {
+                return cachedField;
+            }
+
+            FieldInfo field = type.GetField(fieldName, flags);
+            FieldCache[cacheKey] = field;
+            return field;
         }
 
         private static string BuildHierarchyPath(Transform transform)

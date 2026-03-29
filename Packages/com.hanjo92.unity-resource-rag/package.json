@@ -1,6 +1,6 @@
 {
   "name": "com.hanjo92.unity-resource-rag",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "displayName": "Unity Resource RAG",
   "description": "Asset-aware UI retrieval and blueprint execution tools for Unity projects. Exports project UI resources into a normalized catalog and applies real-asset UI blueprints through MCP-friendly custom tools.",
   "unity": "2021.3",

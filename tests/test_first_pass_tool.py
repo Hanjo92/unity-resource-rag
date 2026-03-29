@@ -70,7 +70,14 @@ class FirstPassToolTests(unittest.TestCase):
                 self.assertEqual(url, "http://127.0.0.1:8080/mcp")
                 return ["index_project_resources", "apply_ui_blueprint"]
 
-            def fake_call_tool(url: str, available_tools: list[str], tool_name: str, arguments: dict[str, object], timeout_ms: int) -> dict[str, object]:
+            def fake_call_tool(
+                url: str,
+                available_tools: list[str],
+                tool_name: str,
+                arguments: dict[str, object],
+                timeout_ms: int,
+                unity_project_path: Path | None = None,
+            ) -> dict[str, object]:
                 calls.append((tool_name, arguments))
                 if tool_name == "index_project_resources":
                     catalog_path.parent.mkdir(parents=True, exist_ok=True)

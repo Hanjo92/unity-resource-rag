@@ -118,6 +118,7 @@ class CatalogDraftToolTests(unittest.TestCase):
                 tool_name: str,
                 arguments: dict[str, object],
                 timeout_ms: int,
+                unity_project_path: Path | None = None,
             ) -> dict[str, object]:
                 calls.append((tool_name, arguments))
                 if tool_name == "index_project_resources":
@@ -148,6 +149,8 @@ class CatalogDraftToolTests(unittest.TestCase):
                 aspect_ratio: float | None = None,
                 vector_index_path: Path | None = None,
                 top_k: int = 5,
+                records: list[dict[str, object]] | None = None,
+                vector_index: dict[str, object] | None = None,
             ) -> dict[str, object]:
                 if preferred_kind == "prefab":
                     return {"results": [{"id": "prefab-shell", "score": 0.72, "path": "Assets/UI/PF_RewardPopup.prefab", "name": "PF_RewardPopup", "assetType": "Prefab", "binding": {"kind": "prefab"}, "semanticText": "reward popup modal dialog shell"}]}
@@ -244,6 +247,8 @@ class CatalogDraftToolTests(unittest.TestCase):
                 aspect_ratio: float | None = None,
                 vector_index_path: Path | None = None,
                 top_k: int = 5,
+                records: list[dict[str, object]] | None = None,
+                vector_index: dict[str, object] | None = None,
             ) -> dict[str, object]:
                 if preferred_kind == "prefab":
                     return {"results": []}
@@ -344,6 +349,8 @@ class CatalogDraftToolTests(unittest.TestCase):
                 aspect_ratio: float | None = None,
                 vector_index_path: Path | None = None,
                 top_k: int = 5,
+                records: list[dict[str, object]] | None = None,
+                vector_index: dict[str, object] | None = None,
             ) -> dict[str, object]:
                 observed_queries.append(query_text)
                 if preferred_kind == "prefab":
@@ -443,6 +450,8 @@ class CatalogDraftToolTests(unittest.TestCase):
                 aspect_ratio: float | None = None,
                 vector_index_path: Path | None = None,
                 top_k: int = 5,
+                records: list[dict[str, object]] | None = None,
+                vector_index: dict[str, object] | None = None,
             ) -> dict[str, object]:
                 observed_queries.append(query_text)
                 if preferred_kind == "prefab":

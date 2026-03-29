@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-30
+
+Patch release focused on reducing end-to-end wait time in Unity build flows.
+
+### Changed
+
+- reduced repeated asset resolution and reflection work during Unity blueprint validation and apply, improving large UI build times
+- reused Unity MCP tool inventory from doctor in `start_ui_build` and added a build-scoped doctor mode that skips unnecessary resource listing during build preflight
+- removed repeated subprocess churn from catalog-first search and the reference-to-blueprint workflow by reusing in-process catalog, vector index, and workflow helpers
+- kept existing Unity MCP menu bridge and readiness-flow improvements from post-`0.6.0` mainline work in the release payload
+
+### Validation
+
+- `python3.12 -m unittest tests.test_doctor_tool tests.test_start_ui_build_tool tests.test_catalog_draft_tool tests.test_first_pass_tool tests.test_bind_blueprint_assets`
+- `python3.12 -m compileall pipeline`
+
 ## [0.6.0] - 2026-03-24
 
 Unity usability follow-up release for `unity-resource-rag`.
@@ -135,7 +151,8 @@ Initial public scaffold for `unity-resource-rag`.
 - Example JSON files were validated locally.
 - Final Unity compile/runtime verification still needs a real Unity project with `unity-mcp`.
 
-[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.5.0...main
+[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.6.1...main
+[0.6.1]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.6.1
 [0.5.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.5.0
 [0.4.0-beta]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.4.0-beta
 [0.3.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.3.0

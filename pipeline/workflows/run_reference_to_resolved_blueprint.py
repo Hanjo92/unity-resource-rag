@@ -9,6 +9,58 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+if __package__ in (None, ""):
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from pipeline.planner.reference_layout_to_blueprint import (
+        build_blueprint as build_template_blueprint,
+        load_json as load_reference_layout_json,
+        save_json as save_template_json,
+        validate_plan,
+    )
+    from pipeline.retrieval.bind_blueprint_assets import (
+        bind_blueprint,
+        load_json as load_blueprint_template_json,
+        save_json as save_binding_json,
+    )
+    from pipeline.retrieval.search_catalog import resolve_vector_index_path as resolve_catalog_vector_index_path
+    from pipeline.retrieval.vector_index import (
+        build_tfidf_index,
+        load_jsonl as load_catalog_jsonl,
+        load_vector_index as load_vector_index_payload,
+        save_json as save_vector_index_json,
+    )
+    from pipeline.workflows.build_mcp_handoff_bundle import (
+        build_bundle as build_mcp_handoff,
+        load_json as load_handoff_input_json,
+        save_json as save_handoff_json,
+    )
+else:
+    from ..planner.reference_layout_to_blueprint import (
+        build_blueprint as build_template_blueprint,
+        load_json as load_reference_layout_json,
+        save_json as save_template_json,
+        validate_plan,
+    )
+    from ..retrieval.bind_blueprint_assets import (
+        bind_blueprint,
+        load_json as load_blueprint_template_json,
+        save_json as save_binding_json,
+    )
+    from ..retrieval.search_catalog import resolve_vector_index_path as resolve_catalog_vector_index_path
+    from ..retrieval.vector_index import (
+        build_tfidf_index,
+        load_jsonl as load_catalog_jsonl,
+        load_vector_index as load_vector_index_payload,
+        save_json as save_vector_index_json,
+    )
+    from .build_mcp_handoff_bundle import (
+        build_bundle as build_mcp_handoff,
+        load_json as load_handoff_input_json,
+        save_json as save_handoff_json,
+    )
+
 
 PIPELINE_ROOT = Path(__file__).resolve().parents[1]
 PLANNER_DIR = PIPELINE_ROOT / "planner"
@@ -89,6 +141,97 @@ def build_workflow_report(
         "vectorIndex": str(vector_index_path) if vector_index_path else None,
         "hasErrors": has_errors,
         "steps": steps,
+    }
+
+
+def run_reference_layout_to_blueprint_step(reference_layout_path: Path, blueprint_template_path: Path) -> tuple[int, dict[str, Any]]:
+    plan = load_reference_layout_json(reference_layout_path)
+    errors = validate_plan(plan)
+    if errors:
+        return 1, {
+            "output": str(blueprint_template_path),
+            "errors": errors,
+        }
+
+    blueprint = build_template_blueprint(plan)
+    save_template_json(blueprint_template_path, blueprint)
+    return 0, {
+        "output": str(blueprint_template_path),
+        "screenName": blueprint.get("screenName"),
+        "rootCanvasName": ((blueprint.get("root") or {}).get("name")),
+    }
+
+
+def run_build_vector_index_step(catalog_path: Path, vector_index_path: Path) -> dict[str, Any]:
+    records = load_catalog_jsonl(catalog_path)
+    vector_index = build_tfidf_index(records)
+    save_vector_index_json(vector_index_path, vector_index)
+    return {
+        "catalog": str(catalog_path),
+        "output": str(vector_index_path),
+        "scheme": vector_index["scheme"],
+        "documentCount": vector_index["documentCount"],
+    }
+
+
+def run_bind_blueprint_step(
+    *,
+    blueprint_template_path: Path,
+    catalog_path: Path,
+    vector_index_path: Path | None,
+    resolved_blueprint_path: Path,
+    binding_report_path: Path,
+    allow_partial: bool,
+) -> tuple[int, dict[str, Any]]:
+    template = load_blueprint_template_json(blueprint_template_path)
+    records = load_catalog_jsonl(catalog_path)
+    vector_index = load_vector_index_payload(vector_index_path) if vector_index_path and vector_index_path.exists() else None
+
+    resolved, report, has_errors = bind_blueprint(
+        template,
+        records,
+        vector_index,
+        allow_partial=allow_partial,
+    )
+
+    report["blueprintTemplate"] = str(blueprint_template_path)
+    report["catalog"] = str(catalog_path)
+    report["vectorIndex"] = str(vector_index_path) if vector_index_path else None
+    report["resolvedBlueprint"] = str(resolved_blueprint_path)
+    report["hasErrors"] = has_errors
+
+    save_binding_json(resolved_blueprint_path, resolved)
+    save_binding_json(binding_report_path, report)
+
+    payload = {
+        "output": str(resolved_blueprint_path),
+        "report": str(binding_report_path),
+        "bindingCount": len(report["bindings"]),
+        "issueCount": len(report["issues"]),
+        "hasErrors": has_errors,
+    }
+    return (1 if has_errors and not allow_partial else 0), payload
+
+
+def run_build_mcp_handoff_step(
+    *,
+    resolved_blueprint_path: Path,
+    binding_report_path: Path,
+    mcp_handoff_path: Path,
+) -> dict[str, Any]:
+    blueprint = load_handoff_input_json(resolved_blueprint_path)
+    binding_report = load_handoff_input_json(binding_report_path) if binding_report_path.exists() else None
+    bundle = build_mcp_handoff(
+        blueprint_path=resolved_blueprint_path,
+        blueprint=blueprint,
+        binding_report_path=binding_report_path if binding_report_path.exists() else None,
+        binding_report=binding_report,
+    )
+    save_handoff_json(mcp_handoff_path, bundle)
+    return {
+        "output": str(mcp_handoff_path),
+        "screenName": bundle.get("screenName"),
+        "hasBindingErrors": (bundle.get("bindingSummary") or {}).get("hasErrors"),
     }
 
 
@@ -252,19 +395,13 @@ def main() -> int:
     assert catalog_path is not None
 
     blueprint_template_path = output_dir / "02-blueprint-template.json"
-    exit_code, payload, stdout, stderr = run_json_command([
-        sys.executable,
-        str(TEMPLATE_SCRIPT),
-        str(current_reference_layout),
-        "--output",
-        str(blueprint_template_path),
-    ])
+    exit_code, payload = run_reference_layout_to_blueprint_step(current_reference_layout, blueprint_template_path)
     steps.append({
         "step": "reference_layout_to_blueprint",
         "exitCode": exit_code,
         "payload": payload,
-        "stdout": stdout or None,
-        "stderr": stderr or None,
+        "stdout": None,
+        "stderr": None,
     })
     if exit_code != 0:
         report = build_workflow_report(
@@ -288,35 +425,15 @@ def main() -> int:
         output_dir,
     )
     if not vector_index_exists:
-        exit_code, payload, stdout, stderr = run_json_command([
-            sys.executable,
-            str(VECTOR_INDEX_SCRIPT),
-            str(catalog_path),
-            "--output",
-            str(vector_index_path),
-        ])
+        payload = run_build_vector_index_step(catalog_path, vector_index_path)
+        exit_code = 0
         steps.append({
             "step": "build_vector_index",
             "exitCode": exit_code,
             "payload": payload,
-            "stdout": stdout or None,
-            "stderr": stderr or None,
+            "stdout": None,
+            "stderr": None,
         })
-        if exit_code != 0:
-            report = build_workflow_report(
-                mode="layout",
-                output_dir=output_dir,
-                screen_name=screen_name,
-                image_path=image_path,
-                reference_layout_path=current_reference_layout,
-                catalog_path=catalog_path,
-                vector_index_path=vector_index_path,
-                steps=steps,
-                has_errors=True,
-            )
-            save_json(workflow_report_path, report)
-            print(json.dumps({"workflowReport": str(workflow_report_path), "hasErrors": True}, ensure_ascii=False, indent=2))
-            return exit_code
     else:
         steps.append({
             "step": "build_vector_index",
@@ -331,46 +448,35 @@ def main() -> int:
 
     resolved_blueprint_path = output_dir / "03-resolved-blueprint.json"
     binding_report_path = output_dir / "03-binding-report.json"
-    bind_command = [
-        sys.executable,
-        str(BIND_SCRIPT),
-        str(blueprint_template_path),
-        str(catalog_path),
-        "--output",
-        str(resolved_blueprint_path),
-        "--report",
-        str(binding_report_path),
-        "--vector-index",
-        str(vector_index_path),
-    ]
-    if args.allow_partial:
-        bind_command.append("--allow-partial")
-
-    exit_code, payload, stdout, stderr = run_json_command(bind_command)
+    exit_code, payload = run_bind_blueprint_step(
+        blueprint_template_path=blueprint_template_path,
+        catalog_path=catalog_path,
+        vector_index_path=resolve_catalog_vector_index_path(catalog_path, vector_index_path),
+        resolved_blueprint_path=resolved_blueprint_path,
+        binding_report_path=binding_report_path,
+        allow_partial=args.allow_partial,
+    )
     steps.append({
         "step": "bind_blueprint_assets",
         "exitCode": exit_code,
         "payload": payload,
-        "stdout": stdout or None,
-        "stderr": stderr or None,
+        "stdout": None,
+        "stderr": None,
     })
 
     mcp_handoff_path = output_dir / "04-mcp-handoff.json"
-    handoff_exit_code, handoff_payload, handoff_stdout, handoff_stderr = run_json_command([
-        sys.executable,
-        str(MCP_HANDOFF_SCRIPT),
-        str(resolved_blueprint_path),
-        "--binding-report",
-        str(binding_report_path),
-        "--output",
-        str(mcp_handoff_path),
-    ])
+    handoff_payload = run_build_mcp_handoff_step(
+        resolved_blueprint_path=resolved_blueprint_path,
+        binding_report_path=binding_report_path,
+        mcp_handoff_path=mcp_handoff_path,
+    )
+    handoff_exit_code = 0
     steps.append({
         "step": "build_mcp_handoff_bundle",
         "exitCode": handoff_exit_code,
         "payload": handoff_payload,
-        "stdout": handoff_stdout or None,
-        "stderr": handoff_stderr or None,
+        "stdout": None,
+        "stderr": None,
     })
 
     has_errors = exit_code != 0 or handoff_exit_code != 0
