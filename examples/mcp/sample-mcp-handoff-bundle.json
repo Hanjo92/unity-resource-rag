@@ -12,9 +12,20 @@
   ],
   "contracts": {
     "customToolName": "apply_ui_blueprint",
-    "customToolResource": "custom_tools"
+    "customToolResource": "custom_tools",
+    "catalogQueryToolName": "query_ui_asset_catalog",
+    "catalogResourceName": "ui_asset_catalog"
   },
   "requests": {
+    "inspectCatalog": {
+      "tool": "execute_custom_tool",
+      "customToolName": "query_ui_asset_catalog",
+      "parameters": {
+        "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+        "pageSize": 25,
+        "pageNumber": 1
+      }
+    },
     "validate": {
       "tool": "execute_custom_tool",
       "customToolName": "apply_ui_blueprint",
@@ -43,6 +54,14 @@
     }
   },
   "directToolFallback": {
+    "inspectCatalog": {
+      "tool": "query_ui_asset_catalog",
+      "parameters": {
+        "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+        "pageSize": 25,
+        "pageNumber": 1
+      }
+    },
     "validate": {
       "tool": "apply_ui_blueprint",
       "parameters": {
@@ -58,19 +77,88 @@
       }
     }
   },
+  "catalogAccess": {
+    "toolName": "query_ui_asset_catalog",
+    "resourceName": "ui_asset_catalog",
+    "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+    "preferredRequest": {
+      "tool": "execute_custom_tool",
+      "customToolName": "query_ui_asset_catalog",
+      "parameters": {
+        "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+        "pageSize": 25,
+        "pageNumber": 1
+      }
+    },
+    "directToolFallback": {
+      "tool": "query_ui_asset_catalog",
+      "parameters": {
+        "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+        "pageSize": 25,
+        "pageNumber": 1
+      }
+    },
+    "resourceFallback": {
+      "resource": "ui_asset_catalog",
+      "parameters": {
+        "catalogPath": "/absolute/path/to/resource_catalog.jsonl",
+        "pageSize": 25,
+        "pageNumber": 1
+      }
+    },
+    "guidance": [
+      "Use `query_ui_asset_catalog` before inventing or replacing prefab, sprite, or TMP font paths.",
+      "Treat the catalog as the source of truth for which project assets actually exist.",
+      "Use `ui_asset_catalog` only when your MCP client handles raw resource browsing better than tool calls.",
+      "The binding report contains low-confidence or unresolved entries. Compare `chosenCandidate` and `alternatives` against the catalog before changing the blueprint."
+    ],
+    "reviewTargets": [
+      {
+        "hierarchyPath": "RewardPopupCanvas/Body/RewardIcon",
+        "target": "asset",
+        "bindingState": "review_needed",
+        "bindingDecision": "low_confidence_review:0.4200<0.5500",
+        "queryText": "reward badge icon",
+        "preferredKind": "sprite",
+        "chosenCandidate": {
+          "id": "reward-icon",
+          "name": "RewardIcon",
+          "path": "Assets/UI/RewardIcon.png",
+          "assetType": "Sprite",
+          "score": 0.42
+        },
+        "alternatives": [
+          {
+            "id": "reward-icon-alt",
+            "name": "RewardIconAlt",
+            "path": "Assets/UI/RewardIconAlt.png",
+            "assetType": "Sprite",
+            "score": 0.4
+          }
+        ]
+      }
+    ],
+    "issueMessages": [
+      "Could not resolve asset query for RewardPopupCanvas/Body/RewardIcon: low_confidence_review:0.4200<0.5500"
+    ]
+  },
   "artifacts": {
     "resolvedBlueprint": "/absolute/path/to/03-resolved-blueprint.json",
-    "bindingReport": "/absolute/path/to/03-binding-report.json"
+    "bindingReport": "/absolute/path/to/03-binding-report.json",
+    "catalogPath": "/absolute/path/to/resource_catalog.jsonl"
   },
   "bindingSummary": {
     "hasErrors": false,
     "bindingCount": 2,
-    "issueCount": 0
+    "issueCount": 0,
+    "reviewTargetCount": 1
   },
   "notes": [
+    "Inspect the project catalog with `query_ui_asset_catalog` before inventing or swapping prefab, sprite, or TMP font paths.",
+    "Use `ui_asset_catalog` only if your MCP client handles raw resource browsing better than tool calls.",
     "Run validate before apply.",
     "If your MCP client exposes Unity custom tools directly, use directToolFallback.",
-    "If custom tools are routed through execute_custom_tool, use requests.validate/apply.",
+    "If custom tools are routed through execute_custom_tool, use requests.inspectCatalog and then requests.validate/apply.",
     "After apply succeeds, run requests.verify to capture a scene view screenshot."
   ]
 }

@@ -76,3 +76,4 @@ MCP tool preset 메모:
 적용 후 screenshot이 생기면 [pipeline/verification/README.md](../verification/README.md)의 repair loop를 이어서 돌릴 수 있다.
 
 MCP handoff bundle 예제는 [sample-mcp-handoff-bundle.json](../../examples/mcp/sample-mcp-handoff-bundle.json)과 [end-to-end-usage.md](../../examples/mcp/end-to-end-usage.md)를 참고하면 된다.
+최근 handoff bundle은 `apply_ui_blueprint` 요청뿐 아니라 `query_ui_asset_catalog` 기반 catalog inspection request도 함께 포함한다. 에이전트나 MCP client가 follow-up 수정을 할 때는 asset path를 추측하기보다 catalog를 먼저 확인하는 흐름을 권장한다.

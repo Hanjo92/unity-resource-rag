@@ -553,6 +553,15 @@ def _format_inspection_summary(payload: dict[str, Any]) -> str:
     ])
 
 
+def _catalog_inspection_next_action(catalog_path: str | None = None) -> str:
+    path_hint = f" Default catalog: {catalog_path}." if catalog_path else ""
+    return (
+        "Before manually changing prefab, sprite, or TMP font references, inspect the project catalog with "
+        "`query_ui_asset_catalog` first (or `ui_asset_catalog` if your client handles raw resources well)."
+        + path_hint
+    )
+
+
 def _format_doctor_summary(payload: dict[str, Any]) -> str:
     lines = [f"overall: {payload['overallStatus']}"]
     for check in payload.get("checks") or []:
@@ -1969,6 +1978,7 @@ def run_first_pass_ui_build(args: dict[str, Any]) -> dict[str, Any]:
         )
 
     next_actions: list[str] = []
+    next_actions.append(_catalog_inspection_next_action(str(catalog_path)))
     verify_request = ((handoff_payload or {}).get("requests") or {}).get("verify")
     if verify_request:
         next_actions.append("After apply, capture the first result with a `manage_camera` screenshot request.")
@@ -2240,6 +2250,7 @@ def run_catalog_draft_ui_build(args: dict[str, Any]) -> dict[str, Any]:
     verify_request = ((handoff_bundle or {}).get("requests") or {}).get("verify")
     next_actions = [
         "Once the draft appears, adjust the title, body, price copy, and spacing first.",
+        _catalog_inspection_next_action(str(catalog_path)),
         "If the result looks off, capture it with `manage_camera` and then run `unity_rag.run_verification_repair_loop` to create a repair handoff.",
     ]
     if template_mode == "hud":
@@ -2468,7 +2479,7 @@ TOOLS: list[ToolSpec] = [
     ),
     ToolSpec(
         name="unity_rag.build_mcp_handoff_bundle",
-        description="Convert a resolved blueprint into a Unity MCP handoff bundle with validate, apply, and verify requests.",
+        description="Convert a resolved blueprint into a Unity MCP handoff bundle with catalog inspection, validate, apply, and verify requests.",
         input_schema=_build_build_mcp_handoff_bundle_schema(),
         handler=build_mcp_handoff_bundle,
     ),

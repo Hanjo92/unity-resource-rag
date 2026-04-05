@@ -148,6 +148,8 @@ Outputs:
 
 Use the resolved blueprint with `apply_ui_blueprint`.
 
+`04-mcp-handoff.json`을 쓰는 클라이언트라면, follow-up 수정 전에 bundle 안의 `requests.inspectCatalog` 또는 `directToolFallback.inspectCatalog`로 catalog를 먼저 확인하는 편이 안전하다. 특히 binding report에 low-confidence / unresolved 항목이 있으면 catalog를 source of truth로 보고 candidate를 다시 고른다.
+
 If the MCP client supports custom tools directly:
 
 ```json

@@ -96,6 +96,7 @@ Output:
 The bundle contains:
 
 - preflight notes
+- catalog inspection guidance and a catalog query request
 - validate request
 - apply request
 - screenshot verification request
