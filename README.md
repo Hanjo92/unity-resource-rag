@@ -57,6 +57,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Windows에서는 `python3` 대신 `py -3 -m venv .venv` 또는 `python -m venv .venv`를 써도 된다. Unity 창의 고급 설정 `Python Command`도 `py`, `py -3`, 절대 경로 Python 실행 파일처럼 명령 형태를 그대로 받을 수 있다.
+
 ### 2) Unity 설정
 
 1. Unity 프로젝트에 `unity-mcp`를 설치한다.

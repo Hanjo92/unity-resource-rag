@@ -34,7 +34,7 @@ namespace UnityResourceRag.Editor
 
             if (!UnityResourceRagEditorSettings.TryDetectBootstrapPythonExecutable(settings.SidecarRepoRoot, out string bootstrapPython))
             {
-                error = "No base Python interpreter was found. Make sure Python 3 is installed, then try again.";
+                error = "No base Python command was found. Make sure Python 3 is installed, then try again.";
                 return false;
             }
 
@@ -79,7 +79,7 @@ namespace UnityResourceRag.Editor
             {
                 ProcessCommandResult createVenv = RunProcess(
                     bootstrapPython,
-                    $"-m venv {Quote(Path.Combine(repoRoot, ".venv"))}",
+                    new[] { "-m", "venv", Path.Combine(repoRoot, ".venv") },
                     repoRoot,
                     BootstrapTimeoutMs);
                 AppendCommandResult(result, createVenv, "Created the sidecar-local `.venv`.");
@@ -110,7 +110,7 @@ namespace UnityResourceRag.Editor
 
             ProcessCommandResult installRequirements = RunProcess(
                 venvPython,
-                $"-m pip install -r {Quote(requirementsPath)}",
+                new[] { "-m", "pip", "install", "-r", requirementsPath },
                 repoRoot,
                 BootstrapTimeoutMs);
             AppendCommandResult(result, installRequirements, "Installed the requirements into the sidecar-local Python runtime.");
@@ -176,20 +176,15 @@ namespace UnityResourceRag.Editor
             return $"Python runtime bootstrap failed with {result.Errors.Count} error(s).";
         }
 
-        private static ProcessCommandResult RunProcess(string fileName, string arguments, string workingDirectory, int timeoutMs)
+        private static ProcessCommandResult RunProcess(string commandText, IEnumerable<string> arguments, string workingDirectory, int timeoutMs)
         {
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = arguments,
-                    WorkingDirectory = workingDirectory,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
+                ProcessStartInfo startInfo = UnityResourceRagEditorSettings.CreateCommandStartInfo(commandText, workingDirectory, arguments);
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
 
                 using var process = Process.Start(startInfo);
                 if (process == null)
@@ -234,11 +229,6 @@ namespace UnityResourceRag.Editor
             {
                 return ProcessCommandResult.Failed(ex.Message);
             }
-        }
-
-        private static string Quote(string value)
-        {
-            return "\"" + value.Replace("\"", "\\\"") + "\"";
         }
 
         private static string ReadTaskResult(Task<string> task)

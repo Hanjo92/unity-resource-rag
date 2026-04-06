@@ -186,7 +186,7 @@ namespace UnityResourceRag.Editor
             _showAdvancedSetup = EditorGUILayout.Foldout(_showAdvancedSetup, "Advanced Paths & Overrides", true);
             if (_showAdvancedSetup)
             {
-                settings.PythonExecutable = EditorGUILayout.TextField("Python Executable", settings.PythonExecutable);
+                settings.PythonExecutable = EditorGUILayout.TextField("Python Command", settings.PythonExecutable);
                 settings.UnityMcpBaseUrl = EditorGUILayout.TextField("Unity MCP Base URL", settings.UnityMcpBaseUrl);
                 settings.CodexConfigPath = EditorGUILayout.TextField("Codex Config Path", settings.CodexConfigPath);
 
@@ -686,7 +686,7 @@ namespace UnityResourceRag.Editor
                     {
                         if (UnityResourceRagArtifactActions.TryRevealPath(value, out string error))
                         {
-                            _artifactActionReport = $"{label} revealed in Finder.";
+                            _artifactActionReport = $"{label} revealed in the file browser.";
                         }
                         else
                         {

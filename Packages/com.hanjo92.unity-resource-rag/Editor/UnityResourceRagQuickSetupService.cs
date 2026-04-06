@@ -145,7 +145,7 @@ namespace UnityResourceRag.Editor
 
         private static void CheckAuthMode(UnityResourceRagEditorSettings settings, UnityResourceRagQuickSetupResult result)
         {
-            result.Steps.Add($"Python interpreter: {settings.PythonExecutable}");
+            result.Steps.Add($"Python command: {settings.PythonExecutable}");
 
             if (settings.AuthMode == UnityResourceRagAuthMode.UseExistingCodexLogin)
             {

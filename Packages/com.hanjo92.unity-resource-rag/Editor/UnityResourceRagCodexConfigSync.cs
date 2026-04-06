@@ -79,14 +79,24 @@ namespace UnityResourceRag.Editor
 
         private static TomlTable CreateSidecarTable(UnityResourceRagEditorSettings settings)
         {
+            if (!UnityResourceRagEditorSettings.TrySplitCommand(settings.PythonExecutable, out string command, out var prefixArguments))
+            {
+                command = settings.PythonExecutable;
+                prefixArguments = new System.Collections.Generic.List<string>();
+            }
+
             var table = new TomlTable
             {
-                ["command"] = new TomlString { Value = settings.PythonExecutable },
+                ["command"] = new TomlString { Value = command },
                 ["cwd"] = new TomlString { Value = settings.SidecarRepoRoot },
                 ["startup_timeout_sec"] = new TomlInteger { Value = 60 },
             };
 
             var args = new TomlArray();
+            foreach (string prefixArgument in prefixArguments)
+            {
+                args.Add(new TomlString { Value = prefixArgument });
+            }
             args.Add(new TomlString { Value = "-m" });
             args.Add(new TomlString { Value = "pipeline.mcp" });
             table["args"] = args;

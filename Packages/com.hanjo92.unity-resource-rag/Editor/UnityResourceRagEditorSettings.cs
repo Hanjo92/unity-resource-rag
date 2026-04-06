@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEngine;
@@ -36,15 +38,16 @@ namespace UnityResourceRag.Editor
     [FilePath("ProjectSettings/UnityResourceRagSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     public sealed class UnityResourceRagEditorSettings : ScriptableSingleton<UnityResourceRagEditorSettings>
     {
-        private const string DefaultPythonExecutable = "python3";
+        private const string LegacyDefaultPythonExecutable = "python3";
         private const string DefaultUnityMcpBaseUrl = "http://127.0.0.1:8080";
         private const int DefaultUnityMcpTimeoutMs = 120000;
         private const string SidecarBundleManifestFileName = "unity-resource-rag-sidecar.json";
+        private static readonly Regex CommandTokenRegex = new Regex("\"([^\"]*)\"|(\\S+)", RegexOptions.Compiled);
 
         [SerializeField] private UnityResourceRagAuthMode _authMode = UnityResourceRagAuthMode.UseExistingCodexLogin;
         [SerializeField] private UnityResourceRagDraftTemplateMode _draftTemplateMode = UnityResourceRagDraftTemplateMode.Popup;
         [SerializeField] private string _sidecarRepoRoot = string.Empty;
-        [SerializeField] private string _pythonExecutable = DefaultPythonExecutable;
+        [SerializeField] private string _pythonExecutable = string.Empty;
         [SerializeField] private string _unityMcpBaseUrl = DefaultUnityMcpBaseUrl;
         [SerializeField] private string _codexConfigPath = string.Empty;
         [SerializeField] private string _codexAuthFile = string.Empty;
@@ -81,8 +84,8 @@ namespace UnityResourceRag.Editor
 
         public string PythonExecutable
         {
-            get => string.IsNullOrWhiteSpace(_pythonExecutable) ? DefaultPythonExecutable : _pythonExecutable;
-            set => _pythonExecutable = string.IsNullOrWhiteSpace(value) ? DefaultPythonExecutable : value.Trim();
+            get => string.IsNullOrWhiteSpace(_pythonExecutable) ? GetDefaultPythonCommand() : _pythonExecutable;
+            set => _pythonExecutable = string.IsNullOrWhiteSpace(value) ? GetDefaultPythonCommand() : value.Trim();
         }
 
         public string UnityMcpBaseUrl
@@ -257,6 +260,11 @@ namespace UnityResourceRag.Editor
         public static string DefaultCodexConfigPath()
         {
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "config.toml");
+        }
+
+        public static string GetDefaultPythonCommand()
+        {
+            return Application.platform == RuntimePlatform.WindowsEditor ? "py" : LegacyDefaultPythonExecutable;
         }
 
         public static string DefaultCodexAuthFilePath()
@@ -498,6 +506,108 @@ namespace UnityResourceRag.Editor
             return CanRunSidecarImports(pythonExecutable, sidecarRepoRoot);
         }
 
+        public static bool IsGenericPythonCommand(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return true;
+            }
+
+            string normalized = NormalizeCommandText(command);
+            return string.Equals(normalized, NormalizeCommandText(GetDefaultPythonCommand()), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, LegacyDefaultPythonExecutable, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "python", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "py", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalized, "py -3", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool TrySplitCommand(string rawCommand, out string fileName, out List<string> arguments)
+        {
+            fileName = string.Empty;
+            arguments = new List<string>();
+            if (string.IsNullOrWhiteSpace(rawCommand))
+            {
+                return false;
+            }
+
+            MatchCollection matches = CommandTokenRegex.Matches(rawCommand.Trim());
+            if (matches.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (Match match in matches)
+            {
+                if (!match.Success)
+                {
+                    continue;
+                }
+
+                string token = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    fileName = ExpandCommandToken(token);
+                }
+                else
+                {
+                    arguments.Add(token);
+                }
+            }
+
+            return !string.IsNullOrWhiteSpace(fileName);
+        }
+
+        public static string JoinCommandArguments(IEnumerable<string> arguments)
+        {
+            if (arguments == null)
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder();
+            foreach (string argument in arguments)
+            {
+                if (argument == null)
+                {
+                    continue;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append(' ');
+                }
+
+                builder.Append(QuoteCommandArgument(argument));
+            }
+
+            return builder.ToString();
+        }
+
+        public static ProcessStartInfo CreateCommandStartInfo(string commandText, string workingDirectory, IEnumerable<string> arguments)
+        {
+            if (!TrySplitCommand(commandText, out string fileName, out List<string> prefixArguments))
+            {
+                throw new ArgumentException("The command is empty.", nameof(commandText));
+            }
+
+            if (arguments != null)
+            {
+                prefixArguments.AddRange(arguments);
+            }
+
+            return new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = JoinCommandArguments(prefixArguments),
+                WorkingDirectory = workingDirectory,
+            };
+        }
+
         private static string NormalizePath(string rawPath)
         {
             if (string.IsNullOrWhiteSpace(rawPath))
@@ -527,26 +637,43 @@ namespace UnityResourceRag.Editor
 
         private bool ShouldAutoDetectPythonExecutable()
         {
-            return string.IsNullOrWhiteSpace(_pythonExecutable)
-                || string.Equals(_pythonExecutable, DefaultPythonExecutable, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_pythonExecutable, "python", StringComparison.OrdinalIgnoreCase);
+            return IsGenericPythonCommand(_pythonExecutable);
         }
 
         private static IEnumerable<string> EnumeratePythonCandidates(string sidecarRepoRoot)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string candidate in new[]
-                     {
-                         SafePathCombine(sidecarRepoRoot, ".venv", "bin", "python"),
-                         SafePathCombine(sidecarRepoRoot, ".venv", "Scripts", "python.exe"),
-                         "/opt/homebrew/Caskroom/miniforge/base/bin/python3",
-                         "/opt/homebrew/bin/python3",
-                         "/opt/homebrew/bin/python",
-                         "/usr/local/bin/python3",
-                         "/usr/local/bin/python",
-                         "python3",
-                         "python",
-                     })
+            var candidates = new List<string>
+            {
+                SafePathCombine(sidecarRepoRoot, ".venv", "Scripts", "python.exe"),
+                SafePathCombine(sidecarRepoRoot, ".venv", "bin", "python"),
+            };
+
+            if (Application.platform == RuntimePlatform.WindowsEditor)
+            {
+                candidates.AddRange(new[]
+                {
+                    "py -3",
+                    "py",
+                    "python",
+                    "python3",
+                });
+            }
+            else
+            {
+                candidates.AddRange(new[]
+                {
+                    "/opt/homebrew/Caskroom/miniforge/base/bin/python3",
+                    "/opt/homebrew/bin/python3",
+                    "/opt/homebrew/bin/python",
+                    "/usr/local/bin/python3",
+                    "/usr/local/bin/python",
+                    "python3",
+                    "python",
+                });
+            }
+
+            foreach (string candidate in candidates)
             {
                 if (string.IsNullOrWhiteSpace(candidate))
                 {
@@ -579,16 +706,14 @@ namespace UnityResourceRag.Editor
 
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = pythonExecutable,
-                    Arguments = "-c \"import pydantic\"",
-                    WorkingDirectory = string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
+                ProcessStartInfo startInfo = CreateCommandStartInfo(
+                    pythonExecutable,
+                    string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
+                    new[] { "-c", "import pydantic" });
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
 
                 using Process process = Process.Start(startInfo);
                 if (process == null)
@@ -627,16 +752,14 @@ namespace UnityResourceRag.Editor
 
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = pythonExecutable,
-                    Arguments = "-c \"import sys; print(sys.executable)\"",
-                    WorkingDirectory = string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
+                ProcessStartInfo startInfo = CreateCommandStartInfo(
+                    pythonExecutable,
+                    string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
+                    new[] { "-c", "import sys; print(sys.executable)" });
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
 
                 using Process process = Process.Start(startInfo);
                 if (process == null)
@@ -683,6 +806,85 @@ namespace UnityResourceRag.Editor
             {
                 return string.Empty;
             }
+        }
+
+        private static string NormalizeCommandText(string rawCommand)
+        {
+            return Regex.Replace(rawCommand.Trim(), "\\s+", " ");
+        }
+
+        private static string ExpandCommandToken(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return string.Empty;
+            }
+
+            string expanded = Environment.ExpandEnvironmentVariables(token.Trim());
+            return expanded.Contains(Path.DirectorySeparatorChar.ToString()) || expanded.Contains(Path.AltDirectorySeparatorChar.ToString())
+                ? NormalizePath(expanded)
+                : expanded;
+        }
+
+        private static string QuoteCommandArgument(string argument)
+        {
+            if (string.IsNullOrEmpty(argument))
+            {
+                return "\"\"";
+            }
+
+            bool needsQuotes = false;
+            for (int index = 0; index < argument.Length; index++)
+            {
+                char character = argument[index];
+                if (char.IsWhiteSpace(character) || character == '"')
+                {
+                    needsQuotes = true;
+                    break;
+                }
+            }
+
+            if (!needsQuotes)
+            {
+                return argument;
+            }
+
+            var builder = new StringBuilder();
+            builder.Append('"');
+
+            int backslashCount = 0;
+            foreach (char character in argument)
+            {
+                if (character == '\\')
+                {
+                    backslashCount++;
+                    continue;
+                }
+
+                if (character == '"')
+                {
+                    builder.Append('\\', backslashCount * 2 + 1);
+                    builder.Append('"');
+                    backslashCount = 0;
+                    continue;
+                }
+
+                if (backslashCount > 0)
+                {
+                    builder.Append('\\', backslashCount);
+                    backslashCount = 0;
+                }
+
+                builder.Append(character);
+            }
+
+            if (backslashCount > 0)
+            {
+                builder.Append('\\', backslashCount * 2);
+            }
+
+            builder.Append('"');
+            return builder.ToString();
         }
     }
 }

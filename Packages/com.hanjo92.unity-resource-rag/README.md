@@ -31,6 +31,11 @@
 8. 필요하면 `index_project_resources`, `query_ui_asset_catalog`, `apply_ui_blueprint`를 custom tool로 직접 호출해 세부 동작을 따로 확인한다.
 9. `ui_asset_catalog`는 callable tool이 아니라 MCP resource라는 점을 기억한다.
 
+Windows 메모:
+
+- `python3`가 없더라도 `Bootstrap Python Runtime`은 `py`, `py -3`, `python` 같은 일반적인 Python 명령을 자동 감지하도록 설계되어 있다.
+- `Advanced Paths & Overrides`의 `Python Command`에는 `py -3`처럼 명령+인자 형태를 그대로 넣을 수 있다.
+
 `Quick Setup`이 하는 일:
 
 - Unity MCP를 HTTP Local transport로 맞춤

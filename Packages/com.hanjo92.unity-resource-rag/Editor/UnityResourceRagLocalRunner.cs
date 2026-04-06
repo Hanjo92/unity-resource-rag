@@ -231,14 +231,12 @@ namespace UnityResourceRag.Editor
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = "No Python executable that can load the sidecar requirements was found. Point Python Executable to an interpreter where `pip install -r requirements.txt` has already been run.",
+                    Error = "No Python command that can load the sidecar requirements was found. Point Python Command to an interpreter where `pip install -r requirements.txt` has already been run.",
                 };
                 return null;
             }
 
-            if (string.IsNullOrWhiteSpace(settings.PythonExecutable)
-                || string.Equals(settings.PythonExecutable, "python3", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(settings.PythonExecutable, "python", StringComparison.OrdinalIgnoreCase))
+            if (UnityResourceRagEditorSettings.IsGenericPythonCommand(settings.PythonExecutable))
             {
                 settings.PythonExecutable = detectedPython;
                 settings.SaveSettings();
@@ -279,16 +277,14 @@ namespace UnityResourceRag.Editor
         {
             try
             {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = preparedRun.PythonExecutable,
-                    Arguments = $"-m pipeline.mcp.local_runner {preparedRun.ToolName} --payload-file {Quote(preparedRun.PayloadFile)}",
-                    WorkingDirectory = preparedRun.SidecarRepoRoot,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                };
+                ProcessStartInfo startInfo = UnityResourceRagEditorSettings.CreateCommandStartInfo(
+                    preparedRun.PythonExecutable,
+                    preparedRun.SidecarRepoRoot,
+                    new[] { "-m", "pipeline.mcp.local_runner", preparedRun.ToolName, "--payload-file", preparedRun.PayloadFile });
+                startInfo.RedirectStandardOutput = true;
+                startInfo.RedirectStandardError = true;
+                startInfo.UseShellExecute = false;
+                startInfo.CreateNoWindow = true;
 
                 using var process = Process.Start(startInfo);
                 if (process == null)
@@ -407,11 +403,6 @@ namespace UnityResourceRag.Editor
             }
 
             return $"Path: {routeLabel} / doctor: {overallStatus} / blueprint: {blueprintPath}";
-        }
-
-        private static string Quote(string value)
-        {
-            return "\"" + value.Replace("\"", "\\\"") + "\"";
         }
 
         private static string ReadTaskResult(Task<string> task)

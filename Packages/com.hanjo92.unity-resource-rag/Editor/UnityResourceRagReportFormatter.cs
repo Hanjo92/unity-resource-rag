@@ -308,7 +308,7 @@ namespace UnityResourceRag.Editor
                 {
                     Title = "Python Runtime",
                     Level = UnityResourceRagReadinessLevel.Attention,
-                    Summary = "A working Python executable was found, but the sidecar-local runtime is not pinned yet.",
+                    Summary = "A working Python command was found, but the sidecar-local runtime is not pinned yet.",
                     NextStep = $"Run Bootstrap Python Runtime or continue with `{detectedPython}` as-is.",
                 };
             }
@@ -569,7 +569,7 @@ namespace UnityResourceRag.Editor
                     builder.AppendLine($"Missing Python module: {missingModule}");
                     builder.AppendLine("Try this next:");
                     builder.AppendLine("- Run Bootstrap Python Runtime first to prepare the sidecar-local `.venv`.");
-                    builder.AppendLine("- If the problem continues, set Python Executable to an interpreter that already has the requirements installed.");
+                    builder.AppendLine("- If the problem continues, set Python Command to an interpreter that already has the requirements installed.");
                 }
             }
 
