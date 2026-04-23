@@ -21,6 +21,13 @@
   "dependencies": {
     "com.unity.nuget.newtonsoft-json": "3.0.2"
   },
+  "samples": [
+    {
+      "displayName": "Blueprint samples for project-specific bindings",
+      "description": "Project-specific blueprint examples that reference project assets and a custom UI component binding. Use the template file as a starting point for your own retrieval and binding setup.",
+      "path": "Samples~/Blueprints"
+    }
+  ],
   "author": {
     "name": "Hanjo92",
     "url": "https://github.com/Hanjo92"

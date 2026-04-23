@@ -33,8 +33,8 @@
 
 Windows 메모:
 
-- `python3`가 없더라도 `Bootstrap Python Runtime`은 `py`, `py -3`, `python` 같은 일반적인 Python 명령을 자동 감지하도록 설계되어 있다.
-- `Advanced Paths & Overrides`의 `Python Command`에는 `py -3`처럼 명령+인자 형태를 그대로 넣을 수 있다.
+- Python 3.11+가 필요하다. `python3`가 없더라도 `Bootstrap Python Runtime`은 `py -3.12`, `py -3.11`, `py -3`, `python` 같은 일반적인 Python 명령을 자동 감지하도록 설계되어 있다.
+- `Advanced Paths & Overrides`의 `Python Command`에는 `py -3.12`처럼 명령+인자 형태를 그대로 넣을 수 있다.
 
 `Quick Setup`이 하는 일:
 
@@ -73,11 +73,11 @@ Windows 메모:
 
 구현 메모는 `Documentation~/resource-indexing-mvp.md`를 참고하면 된다.
 
-MCP sidecar contract는 [mcp-sidecar-contract.md](../../specs/mcp-sidecar-contract.md)와 [examples/mcp/end-to-end-usage.md](../../examples/mcp/end-to-end-usage.md)를 보면 된다.
+MCP sidecar contract는 [mcp-sidecar-contract.md](https://github.com/Hanjo92/unity-resource-rag/blob/main/specs/mcp-sidecar-contract.md)와 [examples/mcp/end-to-end-usage.md](https://github.com/Hanjo92/unity-resource-rag/blob/main/examples/mcp/end-to-end-usage.md)를 보면 된다.
 
-portable sidecar bundle 전략과 build script는 [packaged-sidecar-distribution-strategy.md](../../docs/decisions/packaged-sidecar-distribution-strategy.md)에서 확인할 수 있다.
+portable sidecar bundle 전략과 build script는 [packaged-sidecar-distribution-strategy.md](https://github.com/Hanjo92/unity-resource-rag/blob/main/docs/decisions/packaged-sidecar-distribution-strategy.md)에서 확인할 수 있다.
 
-bundle을 직접 만들 때는 저장소 루트에서 아래 명령을 사용한다.
+full checkout에서 bundle을 직접 만들 때는 저장소 루트에서 아래 명령을 사용한다.
 
 ```bash
 python3 scripts/build_sidecar_bundle.py --output-dir dist

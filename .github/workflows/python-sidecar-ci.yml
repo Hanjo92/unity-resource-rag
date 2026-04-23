@@ -1,0 +1,31 @@
+name: Python Sidecar CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile Python package
+        run: python -m compileall pipeline
+
+      - name: Build sidecar bundle smoke test
+        run: |
+          tmpdir="$(mktemp -d)"
+          python scripts/build_sidecar_bundle.py --output-dir "$tmpdir"

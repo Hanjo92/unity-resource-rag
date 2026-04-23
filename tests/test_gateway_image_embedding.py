@@ -75,6 +75,39 @@ class GatewayImageEmbeddingTests(unittest.TestCase):
         self.assertEqual(embedding["cell_1_1_bright"], 0.5)
         self.assertEqual(embedding["orientation_landscape"], 0.25)
 
+    def test_run_image_embedding_returns_both_items_for_batches(self) -> None:
+        result = run_image_embedding(
+            {
+                "capability": CAPABILITY_NAME,
+                "input": {
+                    "images": [
+                        {
+                            "label": "reward_preview",
+                            "visualTokens": [
+                                "orientation_landscape",
+                                "palette_warm",
+                                "cell_1_1_bright",
+                            ],
+                        },
+                        {
+                            "label": "inventory_preview",
+                            "visualTokens": [
+                                "orientation_landscape",
+                                "palette_cool",
+                                "cell_1_1_dark",
+                            ],
+                        },
+                    ]
+                },
+                "outputSchema": "image_embedding_v1",
+            }
+        )
+
+        self.assertEqual(len(result["output"]["items"]), 2)
+        self.assertIsNone(result["output"]["embedding"])
+        self.assertEqual(result["usage"]["inputImages"], 2)
+        self.assertGreater(result["usage"]["totalTokens"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

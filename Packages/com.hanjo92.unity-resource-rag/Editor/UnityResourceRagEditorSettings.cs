@@ -42,6 +42,9 @@ namespace UnityResourceRag.Editor
         private const string DefaultUnityMcpBaseUrl = "http://127.0.0.1:8080";
         private const int DefaultUnityMcpTimeoutMs = 120000;
         private const string SidecarBundleManifestFileName = "unity-resource-rag-sidecar.json";
+        private const int MinimumPythonMajorVersion = 3;
+        private const int MinimumPythonMinorVersion = 11;
+        private const string MinimumPythonVersionProbe = "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)";
         private static readonly Regex CommandTokenRegex = new Regex("\"([^\"]*)\"|(\\S+)", RegexOptions.Compiled);
 
         [SerializeField] private UnityResourceRagAuthMode _authMode = UnityResourceRagAuthMode.UseExistingCodexLogin;
@@ -266,6 +269,9 @@ namespace UnityResourceRag.Editor
         {
             return Application.platform == RuntimePlatform.WindowsEditor ? "py" : LegacyDefaultPythonExecutable;
         }
+
+        public static string RequiredPythonVersionLabel =>
+            string.Format("{0}.{1}+", MinimumPythonMajorVersion, MinimumPythonMinorVersion);
 
         public static string DefaultCodexAuthFilePath()
         {
@@ -653,6 +659,8 @@ namespace UnityResourceRag.Editor
             {
                 candidates.AddRange(new[]
                 {
+                    "py -3.12",
+                    "py -3.11",
                     "py -3",
                     "py",
                     "python",
@@ -663,11 +671,17 @@ namespace UnityResourceRag.Editor
             {
                 candidates.AddRange(new[]
                 {
+                    "/opt/homebrew/bin/python3.12",
+                    "/opt/homebrew/bin/python3.11",
+                    "/usr/local/bin/python3.12",
+                    "/usr/local/bin/python3.11",
                     "/opt/homebrew/Caskroom/miniforge/base/bin/python3",
                     "/opt/homebrew/bin/python3",
                     "/opt/homebrew/bin/python",
                     "/usr/local/bin/python3",
                     "/usr/local/bin/python",
+                    "python3.12",
+                    "python3.11",
                     "python3",
                     "python",
                 });
@@ -709,7 +723,7 @@ namespace UnityResourceRag.Editor
                 ProcessStartInfo startInfo = CreateCommandStartInfo(
                     pythonExecutable,
                     string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
-                    new[] { "-c", "import pydantic" });
+                    new[] { "-c", MinimumPythonVersionProbe + "; import pydantic" });
                 startInfo.RedirectStandardOutput = true;
                 startInfo.RedirectStandardError = true;
                 startInfo.UseShellExecute = false;
@@ -755,7 +769,7 @@ namespace UnityResourceRag.Editor
                 ProcessStartInfo startInfo = CreateCommandStartInfo(
                     pythonExecutable,
                     string.IsNullOrWhiteSpace(sidecarRepoRoot) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : sidecarRepoRoot,
-                    new[] { "-c", "import sys; print(sys.executable)" });
+                    new[] { "-c", MinimumPythonVersionProbe });
                 startInfo.RedirectStandardOutput = true;
                 startInfo.RedirectStandardError = true;
                 startInfo.UseShellExecute = false;

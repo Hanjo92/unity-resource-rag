@@ -8,6 +8,7 @@ using MCPForUnity.Editor.Tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace UnityResourceRag.Editor.ResourceIndexing
@@ -141,7 +142,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
 
             if (!string.IsNullOrWhiteSpace(parameters.blueprintPath))
             {
-                string resolvedPath = ResourceCatalogStorage.ResolveProjectPath(parameters.blueprintPath, parameters.blueprintPath);
+                string resolvedPath = ResolveBlueprintPath(parameters.blueprintPath);
                 if (!File.Exists(resolvedPath))
                 {
                     error = $"Blueprint file not found: {resolvedPath}";
@@ -160,6 +161,36 @@ namespace UnityResourceRag.Editor.ResourceIndexing
 
             error = "No blueprint provided. Use 'blueprint', 'blueprintJson', or 'blueprintPath'.";
             return false;
+        }
+
+        private static string ResolveBlueprintPath(string blueprintPath)
+        {
+            string trimmedPath = blueprintPath?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmedPath))
+            {
+                return string.Empty;
+            }
+
+            if (Path.IsPathRooted(trimmedPath))
+            {
+                return Path.GetFullPath(trimmedPath).Replace('\\', '/');
+            }
+
+            string normalizedPath = trimmedPath.Replace('\\', '/');
+            if (normalizedPath.Equals("Samples~", StringComparison.OrdinalIgnoreCase) ||
+                normalizedPath.StartsWith("Samples~/", StringComparison.OrdinalIgnoreCase))
+            {
+                PackageInfo packageInfo = PackageInfo.FindForAssembly(Assembly.GetExecutingAssembly());
+                if (packageInfo != null && !string.IsNullOrWhiteSpace(packageInfo.resolvedPath))
+                {
+                    string relativeSamplePath = normalizedPath.Equals("Samples~", StringComparison.OrdinalIgnoreCase)
+                        ? string.Empty
+                        : normalizedPath.Substring("Samples~/".Length);
+                    return Path.GetFullPath(Path.Combine(packageInfo.resolvedPath, "Samples~", relativeSamplePath)).Replace('\\', '/');
+                }
+            }
+
+            return ResourceCatalogStorage.ResolveProjectPath(trimmedPath, trimmedPath);
         }
 
         private static List<UiBlueprintIssue> ValidateBlueprint(UiBlueprintDocument blueprint)

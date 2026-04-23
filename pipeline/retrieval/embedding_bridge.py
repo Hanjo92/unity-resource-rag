@@ -124,6 +124,11 @@ def _extract_embedding_payload(response: Mapping[str, Any]) -> Any:
             if isinstance(first, Mapping):
                 token_weights = first.get("tokenWeights") or first.get("embedding")
                 if token_weights is not None:
+                    if len(items) > 1:
+                        raise EmbeddingBridgeError(
+                            f"Gateway embedding response contains a batch of {len(items)} items; "
+                            "normalize one item at a time."
+                        )
                     return {"container": first, "embedding": token_weights}
 
         for key in EMBEDDING_VECTOR_KEYS:

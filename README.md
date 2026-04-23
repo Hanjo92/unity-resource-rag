@@ -52,12 +52,13 @@
 ### 1) Python 설정
 
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python -m unittest discover -s tests -v
 ```
 
-Windows에서는 `python3` 대신 `py -3 -m venv .venv` 또는 `python -m venv .venv`를 써도 된다. Unity 창의 고급 설정 `Python Command`도 `py`, `py -3`, 절대 경로 Python 실행 파일처럼 명령 형태를 그대로 받을 수 있다.
+`python3.12` 대신 Python 3.11+ interpreter를 가리키는 `python3.11`, `python3`, 또는 절대 경로를 써도 된다. 먼저 `python3.12 --version` 또는 선택한 명령의 `--version` 출력이 3.11 이상인지 확인한다. Windows에서는 `python3.12` 대신 `py -3.12 -m venv .venv`, `py -3.11 -m venv .venv`, 또는 Python 3.11+ 절대 경로를 써도 된다. Unity 창의 고급 설정 `Python Command`도 `py -3.12`, `py -3.11`, 절대 경로 Python 실행 파일처럼 명령 형태를 그대로 받을 수 있다.
 
 ### 2) Unity 설정
 
@@ -116,6 +117,8 @@ python3 scripts/build_sidecar_bundle.py --output-dir dist
 ```
 
 이 명령은 `dist/unity-resource-rag-sidecar-<version>/` 아래에 portable sidecar bundle을 만들고, Unity 창의 `Sidecar Runtime Root`에서 바로 가리킬 수 있는 형태로 정리한다.
+
+릴리스에서는 같은 내용을 `unity-resource-rag-sidecar-<version>.zip` asset으로 받을 수 있다. 가능하면 Unity package version과 같은 `<version>`의 sidecar zip을 내려받아 압축을 풀고, 그 폴더를 `Sidecar Runtime Root`로 지정한다.
 
 ## 빠른 시작
 

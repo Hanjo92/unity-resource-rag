@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import sys
 import unittest
+from urllib import error as urllib_error
 from unittest import mock
 
 
@@ -75,3 +77,52 @@ class UnityHttpTests(unittest.TestCase):
         self.assertNotIn(SESSION_HEADER, {str(key).lower(): value for key, value in calls[0]["headers"].items()})
         self.assertEqual(second_headers[SESSION_HEADER], "session-123")
         self.assertEqual(third_headers[SESSION_HEADER], "session-123")
+
+    def test_client_reinitializes_after_session_error_and_retries_once(self) -> None:
+        calls: list[dict[str, object]] = []
+        init_sessions = iter(["session-123", "session-456"])
+
+        def fake_urlopen(request, timeout=0):
+            headers = dict(request.header_items())
+            body = request.data.decode("utf-8")
+            calls.append({"headers": headers, "body": body})
+
+            if "\"method\": \"initialize\"" in body:
+                return _FakeResponse(
+                    "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"protocolVersion\":\"2024-11-05\"}}\r\n\r\n",
+                    {
+                        "content-type": "text/event-stream",
+                        "mcp-session-id": next(init_sessions),
+                    },
+                )
+
+            if len(calls) == 2:
+                raise urllib_error.HTTPError(
+                    request.full_url,
+                    404,
+                    "Not Found",
+                    hdrs=None,
+                    fp=io.BytesIO(b""),
+                )
+
+            return _FakeResponse(
+                "event: message\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[{\"name\":\"apply_ui_blueprint\"}]}}\r\n\r\n",
+                {"content-type": "text/event-stream", "mcp-session-id": "session-456"},
+            )
+
+        client = UnityMcpHttpClient("http://127.0.0.1:8080/mcp", 3000)
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = client.request("tools/list", {}, 1)
+            follow_up = client.request("tools/list", {}, 2)
+
+        self.assertEqual(result["result"]["tools"][0]["name"], "apply_ui_blueprint")
+        self.assertEqual(follow_up["result"]["tools"][0]["name"], "apply_ui_blueprint")
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(
+            {str(key).lower(): value for key, value in calls[1]["headers"].items()}[SESSION_HEADER],
+            "session-123",
+        )
+        self.assertEqual(
+            {str(key).lower(): value for key, value in calls[3]["headers"].items()}[SESSION_HEADER],
+            "session-456",
+        )

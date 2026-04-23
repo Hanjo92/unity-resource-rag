@@ -128,19 +128,30 @@ class UnityMcpHttpClient:
         if self._session_id is None:
             self._initialize_session()
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": STREAMABLE_HTTP_ACCEPT,
-            SESSION_HEADER: self._session_id or "",
-        }
         payload = {
             "jsonrpc": "2.0",
             "id": request_id,
             "method": method,
             "params": params or {},
         }
-        _, response = _perform_http_post(self._url, payload, headers, self._timeout_ms)
-        return response
+        retried = False
+
+        while True:
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": STREAMABLE_HTTP_ACCEPT,
+                SESSION_HEADER: self._session_id or "",
+            }
+            try:
+                _, response = _perform_http_post(self._url, payload, headers, self._timeout_ms)
+                return response
+            except UnityMcpHttpError as exc:
+                if retried or not self._is_session_related_error(exc):
+                    raise
+
+                self._session_id = None
+                self._initialize_session()
+                retried = True
 
     def _initialize_session(self) -> None:
         headers = {
@@ -174,6 +185,10 @@ class UnityMcpHttpClient:
             )
 
         self._session_id = session_id
+
+    @staticmethod
+    def _is_session_related_error(exc: UnityMcpHttpError) -> bool:
+        return exc.status_code in {400, 401, 403, 404, 409, 410}
 
 
 _CLIENT_CACHE: dict[tuple[str, int], UnityMcpHttpClient] = {}

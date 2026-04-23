@@ -106,7 +106,7 @@ def _capture_result_tool(args: dict[str, Any]) -> dict[str, Any]:
         raise ToolExecutionError("Capture requires `verify_request` or screenshot arguments such as `view_target`.")
 
     request_arguments.setdefault("action", "screenshot")
-    request_arguments["include_image"] = bool(args.get("include_image", False))
+    request_arguments.setdefault("include_image", bool(args.get("include_image", False)))
 
     try:
         response_payload = get_unity_http_client(unity_mcp_url, timeout_ms).request(
