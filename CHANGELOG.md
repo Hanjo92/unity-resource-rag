@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-04-24
+
+Patch release focused on hardening package delivery, release discipline, and Unity sidecar recovery paths.
+
+### Added
+
+- GitHub Actions workflows that validate the Python sidecar on pushes and publish a versioned sidecar bundle to GitHub Releases
+- UPM sample registration for the project-specific blueprint template, plus contributor guidance and issue templates for bug, docs, and release-package reports
+
+### Changed
+
+- preserved nested `include_image` requests in `capture_result` instead of overriding them at the local runner boundary
+- rejected unexpected batched gateway embedding payloads explicitly, so retrieval normalization fails fast instead of flattening ambiguous results
+- retried Unity MCP HTTP calls once after session-related errors by clearing and reinitializing the session automatically
+- tightened benchmark fixture validation for `repeatCount`, `interactionLevel`, and `bindingPolicy`
+- aligned docs, Unity bootstrap probing, and runtime error messages around a Python 3.11+ minimum
+- resolved `Samples~/...` blueprint paths from installed UPM packages and switched package docs to stable GitHub links
+
+### Validation
+
+- `python3.12 -m unittest discover -s tests -v`
+- `python3.12 -m compileall pipeline`
+- `python3.12 scripts/build_sidecar_bundle.py --output-dir <tmp>`
+
 ## [0.6.1] - 2026-03-30
 
 Patch release focused on reducing end-to-end wait time in Unity build flows.
@@ -151,7 +175,8 @@ Initial public scaffold for `unity-resource-rag`.
 - Example JSON files were validated locally.
 - Final Unity compile/runtime verification still needs a real Unity project with `unity-mcp`.
 
-[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.6.1...main
+[Unreleased]: https://github.com/Hanjo92/unity-resource-rag/compare/0.6.2...main
+[0.6.2]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.6.2
 [0.6.1]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.6.1
 [0.5.0]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.5.0
 [0.4.0-beta]: https://github.com/Hanjo92/unity-resource-rag/releases/tag/0.4.0-beta
