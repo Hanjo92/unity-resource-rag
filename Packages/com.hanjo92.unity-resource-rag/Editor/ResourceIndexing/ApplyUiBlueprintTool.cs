@@ -8,7 +8,6 @@ using MCPForUnity.Editor.Tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
-using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace UnityResourceRag.Editor.ResourceIndexing
@@ -180,7 +179,8 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             if (normalizedPath.Equals("Samples~", StringComparison.OrdinalIgnoreCase) ||
                 normalizedPath.StartsWith("Samples~/", StringComparison.OrdinalIgnoreCase))
             {
-                PackageInfo packageInfo = PackageInfo.FindForAssembly(Assembly.GetExecutingAssembly());
+                UnityEditor.PackageManager.PackageInfo packageInfo =
+                    UnityEditor.PackageManager.PackageInfo.FindForAssembly(Assembly.GetExecutingAssembly());
                 if (packageInfo != null && !string.IsNullOrWhiteSpace(packageInfo.resolvedPath))
                 {
                     string relativeSamplePath = normalizedPath.Equals("Samples~", StringComparison.OrdinalIgnoreCase)
