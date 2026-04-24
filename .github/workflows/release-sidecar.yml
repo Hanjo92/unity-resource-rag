@@ -37,38 +37,38 @@ jobs:
           echo "$build_json"
 
           bundle_root="$(BUILD_JSON="$build_json" python - <<'PY'
-import json
-import os
+          import json
+          import os
 
-payload = json.loads(os.environ["BUILD_JSON"])
-print(payload["bundleRoot"])
-PY
-)"
+          payload = json.loads(os.environ["BUILD_JSON"])
+          print(payload["bundleRoot"])
+          PY
+          )"
           version="$(BUILD_JSON="$build_json" python - <<'PY'
-import json
-import os
+          import json
+          import os
 
-payload = json.loads(os.environ["BUILD_JSON"])
-print(payload["version"])
-PY
-)"
+          payload = json.loads(os.environ["BUILD_JSON"])
+          print(payload["version"])
+          PY
+          )"
 
           zip_path="dist/unity-resource-rag-sidecar-${version}.zip"
           python - <<'PY' "$bundle_root" "$zip_path"
-from pathlib import Path
-import shutil
-import sys
+          from pathlib import Path
+          import shutil
+          import sys
 
-bundle_root = Path(sys.argv[1]).resolve()
-zip_path = Path(sys.argv[2]).resolve()
+          bundle_root = Path(sys.argv[1]).resolve()
+          zip_path = Path(sys.argv[2]).resolve()
 
-shutil.make_archive(
-    str(zip_path.with_suffix("")),
-    "zip",
-    root_dir=bundle_root.parent,
-    base_dir=bundle_root.name,
-)
-PY
+          shutil.make_archive(
+              str(zip_path.with_suffix("")),
+              "zip",
+              root_dir=bundle_root.parent,
+              base_dir=bundle_root.name,
+          )
+          PY
 
           echo "bundle_root=$bundle_root" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -78,16 +78,16 @@ PY
         id: release
         run: |
           tag_name="$(python - <<'PY'
-import json
-import os
+          import json
+          import os
 
-tag = os.environ["GITHUB_REF_NAME"]
-if os.environ["GITHUB_EVENT_NAME"] == "release":
-    with open(os.environ["GITHUB_EVENT_PATH"], "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
-    tag = payload.get("release", {}).get("tag_name") or tag
-print(tag)
-PY
+          tag = os.environ["GITHUB_REF_NAME"]
+          if os.environ["GITHUB_EVENT_NAME"] == "release":
+              with open(os.environ["GITHUB_EVENT_PATH"], "r", encoding="utf-8") as handle:
+                  payload = json.load(handle)
+              tag = payload.get("release", {}).get("tag_name") or tag
+          print(tag)
+          PY
           )"
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
 
