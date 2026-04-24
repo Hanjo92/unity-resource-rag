@@ -135,6 +135,38 @@ class RetrievalEmbeddingBridgeTests(unittest.TestCase):
 
         self.assertGreater(scores["reward-popup-frame"], scores["inventory-panel-frame"])
 
+    def test_normalize_gateway_text_embedding_response_rejects_multi_item_batches(self) -> None:
+        response = {
+            "status": "ok",
+            "capability": "text_embedding",
+            "output": {
+                "scheme": "token-frequency-v1",
+                "items": [
+                    {
+                        "index": 0,
+                        "text": "reward popup frame",
+                        "tokenWeights": {
+                            "reward": 0.4,
+                            "popup": 0.3,
+                            "frame": 0.3,
+                        },
+                    },
+                    {
+                        "index": 1,
+                        "text": "inventory panel frame",
+                        "tokenWeights": {
+                            "inventory": 0.5,
+                            "panel": 0.25,
+                            "frame": 0.25,
+                        },
+                    },
+                ],
+            },
+        }
+
+        with self.assertRaisesRegex(EmbeddingBridgeError, "batch"):
+            normalize_gateway_text_embedding_response(response)
+
     def test_generic_embedding_helpers_accept_image_embedding_preview_shape(self) -> None:
         vector_index = _image_vector_index()
         response = {
@@ -161,6 +193,37 @@ class RetrievalEmbeddingBridgeTests(unittest.TestCase):
 
         self.assertIn("palette_warm", embedding)
         self.assertGreater(scores["reward-preview"], scores["inventory-preview"])
+
+    def test_normalize_gateway_sparse_embedding_response_rejects_multi_item_batches(self) -> None:
+        response = {
+            "status": "ok",
+            "capability": "image_embedding",
+            "output": {
+                "scheme": "visual-token-sparse-v1",
+                "preview": True,
+                "items": [
+                    {
+                        "index": 0,
+                        "tokenWeights": {
+                            "orientation_landscape": 0.4,
+                            "palette_warm": 0.35,
+                            "cell_1_1_bright": 0.25,
+                        },
+                    },
+                    {
+                        "index": 1,
+                        "tokenWeights": {
+                            "orientation_landscape": 0.3,
+                            "palette_cool": 0.4,
+                            "cell_1_1_dark": 0.3,
+                        },
+                    },
+                ],
+            },
+        }
+
+        with self.assertRaisesRegex(EmbeddingBridgeError, "batch"):
+            normalize_gateway_sparse_embedding_response(response)
 
     def test_optional_gateway_embedding_falls_back_to_baseline(self) -> None:
         vector_index = _vector_index()

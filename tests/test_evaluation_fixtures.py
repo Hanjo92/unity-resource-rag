@@ -11,7 +11,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from pipeline.evaluation.fixtures import load_benchmark_report, load_benchmark_suite
-from pipeline.evaluation.models import BenchmarkRegionFixture, BenchmarkRetrievalFixture, BenchmarkScreenFixture
+from pipeline.evaluation.models import (
+    BenchmarkFixtureError,
+    BenchmarkRegionFixture,
+    BenchmarkRetrievalFixture,
+    BenchmarkScreenFixture,
+)
 from pipeline.evaluation.report_models import BenchmarkRunReport, BenchmarkRunSummary
 
 
@@ -62,7 +67,7 @@ class EvaluationFixtureTests(unittest.TestCase):
         self.assertEqual(summary.to_dict(), report.summary.to_dict())
 
     def test_invalid_fixture_raises_clear_error(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(BenchmarkFixtureError):
             BenchmarkRetrievalFixture.from_dict(
                 {
                     "schemaVersion": "0.3.0",
@@ -77,6 +82,39 @@ class EvaluationFixtureTests(unittest.TestCase):
                     ],
                 }
             )
+
+    def test_retrieval_fixture_rejects_invalid_repeat_count_and_planner_values(self) -> None:
+        base_region = {
+            "regionId": "broken_region",
+            "regionType": "asset_query",
+            "queryText": "broken",
+            "normalizedBounds": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            "preferredAssetKinds": ["sprite"],
+            "repeatCount": 1,
+            "interactionLevel": "static",
+            "bindingPolicy": "require_confident",
+        }
+
+        invalid_cases = [
+            ("repeatCount zero", {**base_region, "repeatCount": 0}),
+            ("repeatCount negative", {**base_region, "repeatCount": -1}),
+            ("repeatCount float", {**base_region, "repeatCount": 1.5}),
+            ("repeatCount string", {**base_region, "repeatCount": "2"}),
+            ("repeatCount bool", {**base_region, "repeatCount": True}),
+            ("interactionLevel invalid", {**base_region, "interactionLevel": "hover"}),
+            ("bindingPolicy invalid", {**base_region, "bindingPolicy": "hold_if_uncertain"}),
+        ]
+
+        for case_name, region in invalid_cases:
+            with self.subTest(case_name=case_name):
+                with self.assertRaises(BenchmarkFixtureError):
+                    BenchmarkRetrievalFixture.from_dict(
+                        {
+                            "schemaVersion": "0.3.0",
+                            "screenName": "broken_screen",
+                            "regions": [region],
+                        }
+                    )
 
 
 if __name__ == "__main__":

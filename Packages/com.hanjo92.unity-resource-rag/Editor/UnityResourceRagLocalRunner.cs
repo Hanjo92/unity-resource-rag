@@ -231,7 +231,7 @@ namespace UnityResourceRag.Editor
             {
                 immediateFailure = new UnityResourceRagLocalToolResult
                 {
-                    Error = "No Python command that can load the sidecar requirements was found. Point Python Command to an interpreter where `pip install -r requirements.txt` has already been run.",
+                    Error = $"No Python {UnityResourceRagEditorSettings.RequiredPythonVersionLabel} command that can load the sidecar requirements was found. Point Python Command to a Python {UnityResourceRagEditorSettings.RequiredPythonVersionLabel} interpreter where `pip install -r requirements.txt` has already been run.",
                 };
                 return null;
             }

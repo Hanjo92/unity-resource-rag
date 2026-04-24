@@ -103,6 +103,39 @@ class LocalRunnerTests(unittest.TestCase):
         self.assertEqual(result["payload"]["capturedPath"], expected_path)
         self.assertFalse(result["payload"]["request"]["include_image"])
 
+    def test_capture_result_preserves_nested_include_image_request(self) -> None:
+        fake_response = {
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"success": true, "data": {"path": "Assets/Screenshots/reward.png"}}',
+                    }
+                ]
+            }
+        }
+        fake_client = mock.Mock()
+        fake_client.request.return_value = fake_response
+
+        with mock.patch("pipeline.mcp.local_runner.get_unity_http_client", return_value=fake_client):
+            result = run_tool(
+                "capture_result",
+                {
+                    "unity_project_path": "/tmp/UnityProject",
+                    "verify_request": {
+                        "tool": "manage_camera",
+                        "parameters": {
+                            "action": "screenshot",
+                            "view_target": "RewardPopupCanvas",
+                            "include_image": True,
+                        },
+                    },
+                },
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["payload"]["request"]["include_image"])
+
     def test_run_tool_extracts_wrapped_verification_repair_payload(self) -> None:
         wrapped_result = {
             "content": [

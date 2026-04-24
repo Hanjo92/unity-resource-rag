@@ -34,7 +34,7 @@ namespace UnityResourceRag.Editor
 
             if (!UnityResourceRagEditorSettings.TryDetectBootstrapPythonExecutable(settings.SidecarRepoRoot, out string bootstrapPython))
             {
-                error = "No base Python command was found. Make sure Python 3 is installed, then try again.";
+                error = $"No Python {UnityResourceRagEditorSettings.RequiredPythonVersionLabel} command was found. Install a supported Python version or set Python Command to a Python {UnityResourceRagEditorSettings.RequiredPythonVersionLabel} interpreter.";
                 return false;
             }
 

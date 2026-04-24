@@ -1,0 +1,84 @@
+name: Publish sidecar release asset
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "*.*.*"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  publish-sidecar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+
+      - name: Build sidecar bundle and archive it
+        id: build
+        run: |
+          build_json="$(python scripts/build_sidecar_bundle.py --output-dir dist)"
+          echo "$build_json"
+
+          bundle_root="$(BUILD_JSON="$build_json" python - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["BUILD_JSON"])
+print(payload["bundleRoot"])
+PY
+)"
+          version="$(BUILD_JSON="$build_json" python - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["BUILD_JSON"])
+print(payload["version"])
+PY
+)"
+
+          zip_path="dist/unity-resource-rag-sidecar-${version}.zip"
+          python - <<'PY' "$bundle_root" "$zip_path"
+from pathlib import Path
+import shutil
+import sys
+
+bundle_root = Path(sys.argv[1]).resolve()
+zip_path = Path(sys.argv[2]).resolve()
+
+shutil.make_archive(
+    str(zip_path.with_suffix("")),
+    "zip",
+    root_dir=bundle_root.parent,
+    base_dir=bundle_root.name,
+)
+PY
+
+          echo "bundle_root=$bundle_root" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$zip_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.build.outputs.zip_path }}
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -5,6 +5,8 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = "0.3.0"
+ALLOWED_INTERACTION_LEVELS = {"static", "read_only", "interactive"}
+ALLOWED_BINDING_POLICIES = {"require_confident", "review_if_uncertain", "best_match"}
 
 
 class BenchmarkFixtureError(ValueError):
@@ -27,8 +29,15 @@ def _require_str(payload: Mapping[str, Any], key: str) -> str:
 
 def _require_int(payload: Mapping[str, Any], key: str) -> int:
     value = payload.get(key)
-    if not isinstance(value, int):
+    if type(value) is not int:
         raise BenchmarkFixtureError(f"Expected integer at '{key}'.")
+    return value
+
+
+def _require_int_ge(payload: Mapping[str, Any], key: str, minimum: int) -> int:
+    value = _require_int(payload, key)
+    if value < minimum:
+        raise BenchmarkFixtureError(f"Expected integer >= {minimum} at '{key}'.")
     return value
 
 
@@ -43,6 +52,14 @@ def _require_list(payload: Mapping[str, Any], key: str) -> list[Any]:
     value = payload.get(key)
     if not isinstance(value, list):
         raise BenchmarkFixtureError(f"Expected list at '{key}'.")
+    return value
+
+
+def _require_allowed_str(payload: Mapping[str, Any], key: str, allowed: set[str]) -> str:
+    value = _require_str(payload, key)
+    if value not in allowed:
+        allowed_values = ", ".join(sorted(allowed))
+        raise BenchmarkFixtureError(f"Expected one of {{{allowed_values}}} at '{key}'.")
     return value
 
 
@@ -168,9 +185,13 @@ class BenchmarkRegionFixture:
                 "h": _require_float(normalized_bounds, "h"),
             },
             preferred_asset_kinds=preferred_asset_kinds,
-            repeat_count=int(payload.get("repeatCount", 1)),
-            interaction_level=str(payload.get("interactionLevel", "static")),
-            binding_policy=str(payload.get("bindingPolicy", "require_confident")),
+            repeat_count=_require_int_ge(payload, "repeatCount", 1) if "repeatCount" in payload else 1,
+            interaction_level=_require_allowed_str(payload, "interactionLevel", ALLOWED_INTERACTION_LEVELS)
+            if "interactionLevel" in payload
+            else "static",
+            binding_policy=_require_allowed_str(payload, "bindingPolicy", ALLOWED_BINDING_POLICIES)
+            if "bindingPolicy" in payload
+            else "require_confident",
             min_score=float(payload["minScore"]) if payload.get("minScore") is not None else None,
         )
 
