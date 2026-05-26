@@ -741,7 +741,7 @@ def _search_catalog_records(
 
 
 def _candidate_from_record(record: dict[str, Any], *, reason: str) -> dict[str, Any]:
-    return {
+    candidate = {
         "id": record.get("id"),
         "guid": record.get("guid"),
         "localFileId": record.get("localFileId"),
@@ -755,6 +755,11 @@ def _candidate_from_record(record: dict[str, Any], *, reason: str) -> dict[str, 
         "scoreBreakdown": {},
         "reasons": [reason],
     }
+    for key in ("preview", "embeddingRefs", "prefabSummary"):
+        value = record.get(key)
+        if value not in (None, "", [], {}):
+            candidate[key] = value
+    return candidate
 
 
 def _candidate_score(candidate: dict[str, Any] | None) -> float:

@@ -120,14 +120,19 @@ def build_tfidf_index(records: list[dict[str, Any]]) -> dict[str, Any]:
     documents: list[dict[str, Any]] = []
     for record, tokens in zip(records, document_tokens):
         embedding_refs = record.get("embeddingRefs") or {}
-        documents.append({
+        document = {
             "id": record.get("id"),
             "textEmbeddingId": embedding_refs.get("textEmbeddingId") or record.get("id"),
             "path": record.get("path"),
             "name": record.get("name"),
             "assetType": record.get("assetType"),
             "vector": build_sparse_tfidf_vector(tokens, idf),
-        })
+        }
+        if embedding_refs.get("imageEmbeddingId"):
+            document["imageEmbeddingId"] = embedding_refs.get("imageEmbeddingId")
+        if record.get("preview"):
+            document["preview"] = record.get("preview")
+        documents.append(document)
 
     return {
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),

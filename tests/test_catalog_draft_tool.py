@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pipeline.mcp.tools import run_catalog_draft_ui_build
+from pipeline.mcp.tools import _candidate_from_record, run_catalog_draft_ui_build
 
 
 def _tool_payload(result: dict[str, object]) -> dict[str, object]:
@@ -34,6 +34,38 @@ def _write_catalog(path: Path, records: list[dict[str, object]]) -> None:
 
 
 class CatalogDraftToolTests(unittest.TestCase):
+    def test_fallback_candidate_keeps_prefab_preview_metadata(self) -> None:
+        candidate = _candidate_from_record(
+            {
+                "id": "prefab-shell",
+                "guid": "guid-prefab-shell",
+                "path": "Assets/UI/PF_RewardPopup.prefab",
+                "assetType": "Prefab",
+                "name": "PF_RewardPopup",
+                "semanticText": "reward popup modal dialog shell window frame",
+                "preview": {
+                    "path": "Library/ResourceRag/previews/guid-prefab-shell_100100.png",
+                    "width": 256,
+                    "height": 128,
+                },
+                "embeddingRefs": {
+                    "imageEmbeddingId": "prefab-shell-preview",
+                    "textEmbeddingId": "prefab-shell",
+                },
+                "prefabSummary": {
+                    "rootName": "PF_RewardPopup",
+                    "componentTypes": ["RectTransform"],
+                    "childPaths": ["PF_RewardPopup"],
+                },
+                "binding": {"kind": "prefab", "unityLoadPath": "Assets/UI/PF_RewardPopup.prefab"},
+            },
+            reason="prefab-fallback",
+        )
+
+        self.assertEqual(candidate["preview"]["path"], "Library/ResourceRag/previews/guid-prefab-shell_100100.png")
+        self.assertEqual(candidate["embeddingRefs"]["imageEmbeddingId"], "prefab-shell-preview")
+        self.assertEqual(candidate["prefabSummary"]["rootName"], "PF_RewardPopup")
+
     def test_run_catalog_draft_ui_build_reindexes_and_applies_prefab_shell(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
