@@ -154,7 +154,7 @@ def score_record(
     if ((record.get("uiHints") or {}).get("isRepeatableBlock")):
         reasons.append("repeatable-block")
 
-    return {
+    result = {
         "id": record.get("id"),
         "guid": record.get("guid"),
         "localFileId": record.get("localFileId"),
@@ -174,6 +174,11 @@ def score_record(
         },
         "reasons": reasons,
     }
+    for key in ("preview", "embeddingRefs", "prefabSummary"):
+        value = record.get(key)
+        if value not in (None, "", [], {}):
+            result[key] = value
+    return result
 
 
 def search(

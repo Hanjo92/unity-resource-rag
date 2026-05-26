@@ -218,6 +218,8 @@ namespace UnityResourceRag.Editor
             string catalogPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultCatalogRelativePath);
             string manifestPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultManifestRelativePath);
             string previewPath = ResourceCatalogStorage.ResolveProjectPath(null, ResourceCatalogStorage.DefaultPreviewRelativePath);
+            bool hasCatalogArtifacts = File.Exists(catalogPath) || File.Exists(manifestPath);
+            string catalogButtonLabel = hasCatalogArtifacts ? "카탈로그 재생성" : "카탈로그 생성";
 
             EditorGUILayout.Space(10f);
             EditorGUILayout.LabelField("카탈로그 확인", EditorStyles.boldLabel);
@@ -229,7 +231,7 @@ namespace UnityResourceRag.Editor
             {
                 using (new EditorGUI.DisabledScope(_isReadinessRunning || _isBuildRunning || _isCaptureRunning || _isRepairRunning || _isBootstrapRunning))
                 {
-                    if (GUILayout.Button("카탈로그 재생성", GUILayout.Height(24f), GUILayout.Width(132f)))
+                    if (GUILayout.Button(catalogButtonLabel, GUILayout.Height(24f), GUILayout.Width(132f)))
                     {
                         RunCatalogReindex(settings);
                     }

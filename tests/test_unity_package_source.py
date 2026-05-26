@@ -8,6 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "Packages" / "com.hanjo92.unity-resource-rag"
 APPLY_TOOL_PATH = PACKAGE_ROOT / "Editor" / "ResourceIndexing" / "ApplyUiBlueprintTool.cs"
+WINDOW_PATH = PACKAGE_ROOT / "Editor" / "UnityResourceRagWindow.cs"
 PACKAGE_JSON_PATH = PACKAGE_ROOT / "package.json"
 PACKAGE_README_PATH = PACKAGE_ROOT / "README.md"
 PACKAGE_DOC_README_PATH = PACKAGE_ROOT / "Documentation~" / "README.md"
@@ -48,6 +49,13 @@ class UnityPackageSourceTests(unittest.TestCase):
         self.assertIn("Assets/UI/...", text)
         self.assertIn("MyGame.UI.SafeAreaFitter", text)
         self.assertIn("프로젝트 전용 예시", text)
+
+    def test_catalog_window_exposes_initial_create_action(self) -> None:
+        source = WINDOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('bool hasCatalogArtifacts = File.Exists(catalogPath) || File.Exists(manifestPath);', source)
+        self.assertIn('string catalogButtonLabel = hasCatalogArtifacts ? "카탈로그 재생성" : "카탈로그 생성";', source)
+        self.assertIn("GUILayout.Button(catalogButtonLabel", source)
 
 
 if __name__ == "__main__":
