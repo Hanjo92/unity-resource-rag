@@ -41,6 +41,15 @@ class BuildMcpHandoffBundleTests(unittest.TestCase):
                         "path": "Assets/UI/RewardIcon.png",
                         "assetType": "Sprite",
                         "score": 0.42,
+                        "metadataTokens": ["texture_backed", "alpha_transparency", "clamp"],
+                        "assetProvenance": {
+                            "mainAssetType": "Texture2D",
+                            "importerType": "TextureImporter",
+                        },
+                        "textureSummary": {
+                            "sourceTextureName": "RewardIconTexture",
+                            "textureImporterType": "Sprite",
+                        },
                     },
                     "alternatives": [
                         {
@@ -49,6 +58,7 @@ class BuildMcpHandoffBundleTests(unittest.TestCase):
                             "path": "Assets/UI/RewardIconAlt.png",
                             "assetType": "Sprite",
                             "score": 0.40,
+                            "metadataTokens": ["texture_backed"],
                         }
                     ],
                 }
@@ -77,6 +87,9 @@ class BuildMcpHandoffBundleTests(unittest.TestCase):
         self.assertEqual(bundle["artifacts"]["catalogPath"], "/tmp/resource_catalog.jsonl")
         self.assertIn("query_ui_asset_catalog", "\n".join(bundle["notes"]))
         self.assertEqual(bundle["catalogAccess"]["reviewTargets"][0]["queryText"], "reward badge icon")
+        self.assertEqual(bundle["catalogAccess"]["reviewTargets"][0]["chosenCandidate"]["textureSummary"]["sourceTextureName"], "RewardIconTexture")
+        self.assertEqual(bundle["catalogAccess"]["reviewTargets"][0]["chosenCandidate"]["assetProvenance"]["mainAssetType"], "Texture2D")
+        self.assertIn("texture_backed", bundle["catalogAccess"]["reviewTargets"][0]["chosenCandidate"]["metadataTokens"])
 
     def test_build_bundle_keeps_catalog_request_without_binding_report(self) -> None:
         blueprint = {

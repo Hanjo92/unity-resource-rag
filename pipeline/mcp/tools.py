@@ -755,7 +755,16 @@ def _candidate_from_record(record: dict[str, Any], *, reason: str) -> dict[str, 
         "scoreBreakdown": {},
         "reasons": [reason],
     }
-    for key in ("preview", "embeddingRefs", "prefabSummary"):
+    for key in (
+        "preview",
+        "embeddingRefs",
+        "prefabSummary",
+        "metadataTokens",
+        "uiHints",
+        "assetProvenance",
+        "textureSummary",
+        "materialSummary",
+    ):
         value = record.get(key)
         if value not in (None, "", [], {}):
             candidate[key] = value
@@ -798,12 +807,27 @@ def _candidate_semantic_blob(record: dict[str, Any] | None, candidate: dict[str,
             value = source.get(key)
             if value:
                 parts.append(str(value))
+        metadata_tokens = source.get("metadataTokens") or []
+        if metadata_tokens:
+            parts.append(" ".join(str(value) for value in metadata_tokens if value))
         binding = source.get("binding") or {}
         if isinstance(binding, dict):
             for key in ("kind", "unityLoadPath", "subAssetName"):
                 value = binding.get(key)
                 if value:
                     parts.append(str(value))
+        texture_summary = source.get("textureSummary") or {}
+        if isinstance(texture_summary, dict):
+            for key in ("sourceTextureName", "textureImporterType", "spriteImportMode", "textureFormat"):
+                value = texture_summary.get(key)
+                if value:
+                    parts.append(str(value))
+        prefab_summary = source.get("prefabSummary") or {}
+        if isinstance(prefab_summary, dict):
+            for key in ("componentTypes", "layoutGroupTypes"):
+                values = prefab_summary.get(key) or []
+                if values:
+                    parts.append(" ".join(str(value) for value in values if value))
     return " ".join(parts).lower()
 
 

@@ -72,11 +72,15 @@ def score_region_fit(query: Query, record: dict[str, Any]) -> float:
     region = query.region_type.lower()
     hints = record.get("uiHints") or {}
     preferred_use = [value.lower() for value in (hints.get("preferredUse") or [])]
+    component_roles = [value.lower() for value in (hints.get("componentRoles") or [])]
     semantic = (record.get("semanticText") or "").lower()
 
     score = 0.0
     if region in preferred_use:
         score += 0.7
+
+    if region in component_roles:
+        score += 0.15
 
     if region.replace("_", " ") in semantic or region.replace("_", "") in semantic:
         score += 0.2
@@ -85,6 +89,9 @@ def score_region_fit(query: Query, record: dict[str, Any]) -> float:
         score += 0.1
 
     if "inventory" in region and hints.get("isRepeatableBlock"):
+        score += 0.1
+
+    if region in {"icon", "badge_icon"} and hints.get("prefersPreserveAspect"):
         score += 0.1
 
     return min(score, 1.0)
@@ -174,7 +181,16 @@ def score_record(
         },
         "reasons": reasons,
     }
-    for key in ("preview", "embeddingRefs", "prefabSummary"):
+    for key in (
+        "preview",
+        "embeddingRefs",
+        "prefabSummary",
+        "metadataTokens",
+        "uiHints",
+        "assetProvenance",
+        "textureSummary",
+        "materialSummary",
+    ):
         value = record.get(key)
         if value not in (None, "", [], {}):
             result[key] = value

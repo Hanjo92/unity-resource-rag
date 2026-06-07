@@ -56,6 +56,53 @@ def _blueprint(query_key: str, query: dict[str, object]) -> dict[str, object]:
 
 
 class BindBlueprintAssetsTests(unittest.TestCase):
+    def test_texture_backed_image_binding_resets_non_white_tint(self) -> None:
+        resolved, report, has_errors = binder.bind_blueprint(
+            {
+                "screenName": "TextureScreen",
+                "root": {
+                    "id": "root",
+                    "name": "Root",
+                    "children": [
+                        {
+                            "id": "texture-node",
+                            "name": "TextureNode",
+                            "kind": "image",
+                            "image": {
+                                "type": "Simple",
+                                "color": "#FF3366FF",
+                            },
+                            "assetQuery": {
+                                "queryText": "hero popup frame",
+                                "bindingPolicy": "best_match",
+                            },
+                        }
+                    ],
+                },
+            },
+            [
+                {
+                    "id": "hero_frame",
+                    "name": "HeroFrame",
+                    "path": "Assets/UI/HeroFrame.png",
+                    "assetType": "sprite",
+                    "binding": {"kind": "sprite"},
+                    "semanticText": "hero popup frame gold blue",
+                    "uiHints": {"isTextureBacked": True},
+                }
+            ],
+            _vector_index(),
+            allow_partial=True,
+        )
+
+        node = resolved["root"]["children"][0]
+        entry = report["bindings"][0]
+
+        self.assertFalse(has_errors)
+        self.assertEqual(node["image"]["color"], "#FFFFFFFF")
+        self.assertEqual(entry["styleAdjustments"][0]["kind"], "image_color_reset")
+        self.assertEqual(entry["styleAdjustments"][0]["from"], "#FF3366FF")
+
     def test_hold_policy_preserves_query_and_candidate(self) -> None:
         resolved, report, has_errors = binder.bind_blueprint(
             _blueprint(

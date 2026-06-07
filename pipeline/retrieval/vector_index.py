@@ -55,10 +55,34 @@ def compose_record_text(record: dict[str, Any]) -> str:
     if folder_tokens:
         append(" ".join(folder_tokens))
 
+    metadata_tokens = record.get("metadataTokens") or []
+    if metadata_tokens:
+        append(" ".join(metadata_tokens), repeat=2)
+
     ui_hints = record.get("uiHints") or {}
     preferred_use = ui_hints.get("preferredUse") or []
     if preferred_use:
         append(" ".join(preferred_use))
+    component_roles = ui_hints.get("componentRoles") or []
+    if component_roles:
+        append(" ".join(component_roles))
+
+    asset_provenance = record.get("assetProvenance") or {}
+    append(asset_provenance.get("mainAssetName"))
+    append(asset_provenance.get("mainAssetType"))
+    append(asset_provenance.get("importerType"))
+
+    texture_summary = record.get("textureSummary") or {}
+    append(texture_summary.get("sourceTextureName"), repeat=2)
+    append(texture_summary.get("textureImporterType"))
+    append(texture_summary.get("spriteImportMode"))
+    append(texture_summary.get("textureFormat"))
+    append(texture_summary.get("wrapMode"))
+    append(texture_summary.get("filterMode"))
+
+    material_summary = record.get("materialSummary") or {}
+    append(material_summary.get("shaderName"))
+    append(material_summary.get("mainTextureName"))
 
     prefab_summary = record.get("prefabSummary") or {}
     append(prefab_summary.get("rootName"))
@@ -67,9 +91,23 @@ def compose_record_text(record: dict[str, Any]) -> str:
     if component_types:
         append(" ".join(component_types))
 
+    layout_group_types = prefab_summary.get("layoutGroupTypes") or []
+    if layout_group_types:
+        append(" ".join(layout_group_types))
+
     child_paths = prefab_summary.get("childPaths") or []
     if child_paths:
         append(" ".join(child_paths[:20]))
+
+    for key in (
+        "referencedSpritePaths",
+        "referencedTexturePaths",
+        "referencedFontPaths",
+        "referencedMaterialPaths",
+    ):
+        referenced_paths = prefab_summary.get(key) or []
+        if referenced_paths:
+            append(" ".join(referenced_paths[:12]))
 
     return " ".join(parts)
 
@@ -128,6 +166,17 @@ def build_tfidf_index(records: list[dict[str, Any]]) -> dict[str, Any]:
             "assetType": record.get("assetType"),
             "vector": build_sparse_tfidf_vector(tokens, idf),
         }
+        for key in (
+            "metadataTokens",
+            "uiHints",
+            "assetProvenance",
+            "textureSummary",
+            "materialSummary",
+            "prefabSummary",
+        ):
+            value = record.get(key)
+            if value not in (None, "", [], {}):
+                document[key] = value
         if embedding_refs.get("imageEmbeddingId"):
             document["imageEmbeddingId"] = embedding_refs.get("imageEmbeddingId")
         if record.get("preview"):
