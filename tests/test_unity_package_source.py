@@ -8,6 +8,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "Packages" / "com.hanjo92.unity-resource-rag"
 APPLY_TOOL_PATH = PACKAGE_ROOT / "Editor" / "ResourceIndexing" / "ApplyUiBlueprintTool.cs"
+CATALOG_BUILDER_PATH = PACKAGE_ROOT / "Editor" / "ResourceIndexing" / "ResourceCatalogBuilder.cs"
+CATALOG_MODELS_PATH = PACKAGE_ROOT / "Editor" / "ResourceIndexing" / "ResourceCatalogModels.cs"
 WINDOW_PATH = PACKAGE_ROOT / "Editor" / "UnityResourceRagWindow.cs"
 PACKAGE_JSON_PATH = PACKAGE_ROOT / "package.json"
 PACKAGE_README_PATH = PACKAGE_ROOT / "README.md"
@@ -56,6 +58,27 @@ class UnityPackageSourceTests(unittest.TestCase):
         self.assertIn('bool hasCatalogArtifacts = File.Exists(catalogPath) || File.Exists(manifestPath);', source)
         self.assertIn('string catalogButtonLabel = hasCatalogArtifacts ? "카탈로그 재생성" : "카탈로그 생성";', source)
         self.assertIn("GUILayout.Button(catalogButtonLabel", source)
+
+    def test_catalog_models_include_richer_metadata_sections(self) -> None:
+        source = CATALOG_MODELS_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("metadataTokens", source)
+        self.assertIn("ResourceAssetProvenance", source)
+        self.assertIn("ResourceTextureSummary", source)
+        self.assertIn("ResourceMaterialSummary", source)
+        self.assertIn("componentCounts", source)
+        self.assertIn("referencedSpritePaths", source)
+
+    def test_catalog_builder_collects_richer_texture_and_prefab_metadata(self) -> None:
+        source = CATALOG_BUILDER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("BuildAssetProvenance", source)
+        self.assertIn("BuildTextureSummary", source)
+        self.assertIn("BuildMaterialSummary", source)
+        self.assertIn("BuildMetadataTokens", source)
+        self.assertIn("ReadObjectProperty", source)
+        self.assertIn("referencedSpritePaths", source)
+        self.assertIn("componentCounts", source)
 
 
 if __name__ == "__main__":

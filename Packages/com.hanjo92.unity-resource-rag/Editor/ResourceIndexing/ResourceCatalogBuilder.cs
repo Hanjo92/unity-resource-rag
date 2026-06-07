@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
     /// </summary>
     public static class ResourceCatalogBuilder
     {
+        private static readonly Dictionary<string, PropertyInfo> ComponentPropertyCache = new Dictionary<string, PropertyInfo>(StringComparer.Ordinal);
         private static readonly string[] DefaultAssetTypes =
         {
             "Sprite",
@@ -135,6 +137,7 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             bool includePreviews,
             string previewDirectory)
         {
+            UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(path);
             string guid;
             long localFileId;
             if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(asset, out guid, out localFileId))
@@ -147,6 +150,11 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             List<string> pathTokens = Tokenize(path);
             List<string> nameTokens = Tokenize(asset.name);
             List<string> inferredTokens = InferSemanticTokens(asset, assetType);
+            ResourceAssetProvenance assetProvenance = BuildAssetProvenance(path, mainAsset);
+            ResourceTextureSummary textureSummary = BuildTextureSummary(asset, path, mainAsset);
+            ResourceMaterialSummary materialSummary = BuildMaterialSummary(asset);
+            ResourcePrefabSummary prefabSummary = BuildPrefabSummary(asset);
+            List<string> metadataTokens = BuildMetadataTokens(assetType, assetProvenance, textureSummary, materialSummary, prefabSummary);
 
             var record = new ResourceCatalogRecord
             {
@@ -159,10 +167,14 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 name = asset.name,
                 labels = labels,
                 folderTokens = pathTokens,
-                semanticText = BuildSemanticText(pathTokens, nameTokens, labels, inferredTokens),
+                metadataTokens = metadataTokens,
+                semanticText = BuildSemanticText(pathTokens, nameTokens, labels, inferredTokens.Concat(metadataTokens)),
                 geometry = BuildGeometry(asset),
-                uiHints = BuildUiHints(asset, assetType, inferredTokens),
-                prefabSummary = BuildPrefabSummary(asset),
+                uiHints = BuildUiHints(asset, assetType, inferredTokens, textureSummary, materialSummary, prefabSummary),
+                assetProvenance = assetProvenance,
+                textureSummary = textureSummary,
+                materialSummary = materialSummary,
+                prefabSummary = prefabSummary,
                 embeddingRefs = new ResourceEmbeddingRefs
                 {
                     textEmbeddingId = string.Format("{0}:{1}", guid, localFileId)
@@ -228,7 +240,85 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             return null;
         }
 
-        private static ResourceUiHints BuildUiHints(UnityEngine.Object asset, string assetType, List<string> semanticTokens)
+        private static ResourceAssetProvenance BuildAssetProvenance(string path, UnityEngine.Object mainAsset)
+        {
+            AssetImporter importer = AssetImporter.GetAtPath(path);
+            return new ResourceAssetProvenance
+            {
+                mainAssetPath = path,
+                mainAssetName = mainAsset != null ? mainAsset.name : null,
+                mainAssetType = mainAsset != null ? mainAsset.GetType().Name : null,
+                importerType = importer != null ? importer.GetType().Name : null
+            };
+        }
+
+        private static ResourceTextureSummary BuildTextureSummary(UnityEngine.Object asset, string path, UnityEngine.Object mainAsset)
+        {
+            Texture2D texture = null;
+            float? pixelsPerUnit = null;
+            if (asset is Sprite sprite)
+            {
+                texture = sprite.texture;
+                pixelsPerUnit = sprite.pixelsPerUnit;
+            }
+            else if (asset is Texture2D directTexture)
+            {
+                texture = directTexture;
+            }
+
+            if (texture == null)
+            {
+                return null;
+            }
+
+            TextureImporter importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            string texturePath = AssetDatabase.GetAssetPath(texture);
+            return new ResourceTextureSummary
+            {
+                sourceTexturePath = string.IsNullOrWhiteSpace(texturePath) ? path : texturePath,
+                sourceTextureName = texture.name,
+                sourceTextureAssetType = mainAsset != null ? mainAsset.GetType().Name : texture.GetType().Name,
+                textureImporterType = importer != null ? importer.textureType.ToString() : null,
+                spriteImportMode = importer != null ? importer.spriteImportMode.ToString() : null,
+                textureFormat = texture.format.ToString(),
+                wrapMode = texture.wrapMode.ToString(),
+                filterMode = texture.filterMode.ToString(),
+                hasAlpha = TextureFormatIncludesAlpha(texture.format),
+                alphaIsTransparency = importer != null ? (bool?)importer.alphaIsTransparency : null,
+                sRgbTexture = importer != null ? (bool?)importer.sRGBTexture : null,
+                mipmapEnabled = importer != null ? (bool?)importer.mipmapEnabled : null,
+                isReadable = texture.isReadable,
+                pixelsPerUnit = pixelsPerUnit
+            };
+        }
+
+        private static ResourceMaterialSummary BuildMaterialSummary(UnityEngine.Object asset)
+        {
+            Material material = asset as Material;
+            if (material == null)
+            {
+                return null;
+            }
+
+            Texture mainTexture = material.mainTexture;
+            string mainTexturePath = mainTexture != null ? AssetDatabase.GetAssetPath(mainTexture) : null;
+            return new ResourceMaterialSummary
+            {
+                shaderName = material.shader != null ? material.shader.name : null,
+                mainTexturePath = string.IsNullOrWhiteSpace(mainTexturePath) ? null : mainTexturePath,
+                mainTextureName = mainTexture != null ? mainTexture.name : null,
+                hasMainTexture = mainTexture != null,
+                hasColorProperty = material.HasProperty("_Color") || material.HasProperty("_BaseColor")
+            };
+        }
+
+        private static ResourceUiHints BuildUiHints(
+            UnityEngine.Object asset,
+            string assetType,
+            List<string> semanticTokens,
+            ResourceTextureSummary textureSummary,
+            ResourceMaterialSummary materialSummary,
+            ResourcePrefabSummary prefabSummary)
         {
             string semanticBlob = string.Join(" ", semanticTokens);
             bool looksRepeatable = ContainsAny(semanticBlob, "slot", "cell", "card", "item", "tab", "button");
@@ -239,7 +329,11 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                 isNineSliceCandidate = asset is Sprite sprite && (sprite.border.x + sprite.border.y + sprite.border.z + sprite.border.w) > 0f,
                 isSingleImageRegion = asset is Sprite || asset is Texture2D,
                 isRepeatableBlock = assetType.Equals("Prefab", StringComparison.OrdinalIgnoreCase) && looksRepeatable,
-                preferredUse = InferPreferredUse(semanticBlob, looksFrame, looksRepeatable)
+                isTextureBacked = textureSummary != null || (materialSummary != null && materialSummary.hasMainTexture),
+                prefersPreserveAspect = (asset is Sprite || asset is Texture2D) && !looksFrame,
+                hasTransparency = textureSummary != null && (textureSummary.alphaIsTransparency == true || textureSummary.hasAlpha == true),
+                preferredUse = InferPreferredUse(semanticBlob, looksFrame, looksRepeatable),
+                componentRoles = InferComponentRoles(prefabSummary)
             };
         }
 
@@ -252,15 +346,37 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             }
 
             var componentTypes = new HashSet<string>();
+            var componentCounts = new Dictionary<string, int>(StringComparer.Ordinal);
             var childPaths = new List<string>();
+            var layoutGroupTypes = new HashSet<string>(StringComparer.Ordinal);
+            var spritePaths = new HashSet<string>(StringComparer.Ordinal);
+            var texturePaths = new HashSet<string>(StringComparer.Ordinal);
+            var fontPaths = new HashSet<string>(StringComparer.Ordinal);
+            var materialPaths = new HashSet<string>(StringComparer.Ordinal);
 
-            CollectPrefabData(prefab.transform, prefab.name, componentTypes, childPaths);
+            CollectPrefabData(
+                prefab.transform,
+                prefab.name,
+                componentTypes,
+                componentCounts,
+                childPaths,
+                layoutGroupTypes,
+                spritePaths,
+                texturePaths,
+                fontPaths,
+                materialPaths);
 
             return new ResourcePrefabSummary
             {
                 rootName = prefab.name,
                 componentTypes = componentTypes.OrderBy(value => value).ToList(),
-                childPaths = childPaths
+                componentCounts = componentCounts.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value),
+                childPaths = childPaths,
+                layoutGroupTypes = layoutGroupTypes.OrderBy(value => value).ToList(),
+                referencedSpritePaths = spritePaths.OrderBy(value => value).ToList(),
+                referencedTexturePaths = texturePaths.OrderBy(value => value).ToList(),
+                referencedFontPaths = fontPaths.OrderBy(value => value).ToList(),
+                referencedMaterialPaths = materialPaths.OrderBy(value => value).ToList()
             };
         }
 
@@ -268,7 +384,13 @@ namespace UnityResourceRag.Editor.ResourceIndexing
             Transform transform,
             string currentPath,
             HashSet<string> componentTypes,
-            List<string> childPaths)
+            Dictionary<string, int> componentCounts,
+            List<string> childPaths,
+            HashSet<string> layoutGroupTypes,
+            HashSet<string> spritePaths,
+            HashSet<string> texturePaths,
+            HashSet<string> fontPaths,
+            HashSet<string> materialPaths)
         {
             childPaths.Add(currentPath);
             Component[] components = transform.GetComponents<Component>();
@@ -280,13 +402,214 @@ namespace UnityResourceRag.Editor.ResourceIndexing
                     continue;
                 }
 
-                componentTypes.Add(component.GetType().Name);
+                string componentTypeName = component.GetType().Name;
+                componentTypes.Add(componentTypeName);
+                if (componentCounts.ContainsKey(componentTypeName))
+                {
+                    componentCounts[componentTypeName] += 1;
+                }
+                else
+                {
+                    componentCounts[componentTypeName] = 1;
+                }
+
+                if (componentTypeName.EndsWith("LayoutGroup", StringComparison.Ordinal) ||
+                    string.Equals(componentTypeName, "GridLayoutGroup", StringComparison.Ordinal) ||
+                    string.Equals(componentTypeName, "ContentSizeFitter", StringComparison.Ordinal) ||
+                    string.Equals(componentTypeName, "LayoutElement", StringComparison.Ordinal))
+                {
+                    layoutGroupTypes.Add(componentTypeName);
+                }
+
+                AddAssetPath(spritePaths, ReadObjectProperty(component, "sprite"));
+                AddAssetPath(texturePaths, ReadObjectProperty(component, "texture"));
+                AddAssetPath(texturePaths, ReadObjectProperty(component, "mainTexture"));
+                AddAssetPath(fontPaths, ReadObjectProperty(component, "font"));
+                AddAssetPath(materialPaths, ReadObjectProperty(component, "material"));
+                AddAssetPath(materialPaths, ReadObjectProperty(component, "sharedMaterial"));
             }
 
             for (int i = 0; i < transform.childCount; i++)
             {
                 Transform child = transform.GetChild(i);
-                CollectPrefabData(child, currentPath + "/" + child.name, componentTypes, childPaths);
+                CollectPrefabData(
+                    child,
+                    currentPath + "/" + child.name,
+                    componentTypes,
+                    componentCounts,
+                    childPaths,
+                    layoutGroupTypes,
+                    spritePaths,
+                    texturePaths,
+                    fontPaths,
+                    materialPaths);
+            }
+        }
+
+        private static List<string> BuildMetadataTokens(
+            string assetType,
+            ResourceAssetProvenance assetProvenance,
+            ResourceTextureSummary textureSummary,
+            ResourceMaterialSummary materialSummary,
+            ResourcePrefabSummary prefabSummary)
+        {
+            var tokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            AddTokens(tokens, Tokenize(assetType));
+
+            if (assetProvenance != null)
+            {
+                AddTokens(tokens, Tokenize(assetProvenance.mainAssetType));
+                AddTokens(tokens, Tokenize(assetProvenance.importerType));
+                AddTokens(tokens, Tokenize(assetProvenance.mainAssetName));
+            }
+
+            if (textureSummary != null)
+            {
+                AddTokens(tokens, Tokenize(textureSummary.sourceTextureName));
+                AddTokens(tokens, Tokenize(textureSummary.textureImporterType));
+                AddTokens(tokens, Tokenize(textureSummary.spriteImportMode));
+                AddTokens(tokens, Tokenize(textureSummary.textureFormat));
+                AddTokens(tokens, Tokenize(textureSummary.wrapMode));
+                AddTokens(tokens, Tokenize(textureSummary.filterMode));
+
+                if (textureSummary.hasAlpha == true)
+                {
+                    tokens.Add("has_alpha");
+                }
+
+                if (textureSummary.alphaIsTransparency == true)
+                {
+                    tokens.Add("alpha_transparency");
+                }
+
+                if (textureSummary.mipmapEnabled == false)
+                {
+                    tokens.Add("no_mipmap");
+                }
+
+                if (textureSummary.sRgbTexture == true)
+                {
+                    tokens.Add("srgb");
+                }
+
+                tokens.Add("texture_backed");
+            }
+
+            if (materialSummary != null)
+            {
+                AddTokens(tokens, Tokenize(materialSummary.shaderName));
+                AddTokens(tokens, Tokenize(materialSummary.mainTextureName));
+                if (materialSummary.hasMainTexture)
+                {
+                    tokens.Add("main_texture");
+                }
+
+                if (materialSummary.hasColorProperty)
+                {
+                    tokens.Add("tintable");
+                }
+            }
+
+            if (prefabSummary != null)
+            {
+                AddTokens(tokens, prefabSummary.componentTypes.SelectMany(Tokenize));
+                AddTokens(tokens, prefabSummary.layoutGroupTypes.SelectMany(Tokenize));
+                AddTokens(tokens, prefabSummary.referencedSpritePaths.SelectMany(path => Tokenize(System.IO.Path.GetFileNameWithoutExtension(path))));
+                AddTokens(tokens, prefabSummary.referencedTexturePaths.SelectMany(path => Tokenize(System.IO.Path.GetFileNameWithoutExtension(path))));
+                AddTokens(tokens, prefabSummary.referencedFontPaths.SelectMany(path => Tokenize(System.IO.Path.GetFileNameWithoutExtension(path))));
+                AddTokens(tokens, prefabSummary.referencedMaterialPaths.SelectMany(path => Tokenize(System.IO.Path.GetFileNameWithoutExtension(path))));
+            }
+
+            return tokens.OrderBy(value => value).ToList();
+        }
+
+        private static List<string> InferComponentRoles(ResourcePrefabSummary prefabSummary)
+        {
+            var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (prefabSummary == null)
+            {
+                return roles.ToList();
+            }
+
+            foreach (string componentType in prefabSummary.componentTypes)
+            {
+                if (string.Equals(componentType, "Button", StringComparison.Ordinal))
+                {
+                    roles.Add("button");
+                }
+                else if (string.Equals(componentType, "ScrollRect", StringComparison.Ordinal))
+                {
+                    roles.Add("scroll");
+                    roles.Add("list");
+                }
+                else if (string.Equals(componentType, "Image", StringComparison.Ordinal) ||
+                         string.Equals(componentType, "RawImage", StringComparison.Ordinal))
+                {
+                    roles.Add("image");
+                }
+                else if (string.Equals(componentType, "TextMeshProUGUI", StringComparison.Ordinal) ||
+                         string.Equals(componentType, "TMP_Text", StringComparison.Ordinal))
+                {
+                    roles.Add("text");
+                }
+                else if (componentType.EndsWith("LayoutGroup", StringComparison.Ordinal) ||
+                         string.Equals(componentType, "LayoutElement", StringComparison.Ordinal) ||
+                         string.Equals(componentType, "ContentSizeFitter", StringComparison.Ordinal))
+                {
+                    roles.Add("layout");
+                }
+                else if (string.Equals(componentType, "Mask", StringComparison.Ordinal) ||
+                         string.Equals(componentType, "RectMask2D", StringComparison.Ordinal))
+                {
+                    roles.Add("mask");
+                }
+            }
+
+            return roles.OrderBy(value => value).ToList();
+        }
+
+        private static bool TextureFormatIncludesAlpha(TextureFormat format)
+        {
+            string name = format.ToString();
+            return name.IndexOf("Alpha", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("RGBA", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   name.IndexOf("ARGB", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static UnityEngine.Object ReadObjectProperty(Component component, string propertyName)
+        {
+            if (component == null || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return null;
+            }
+
+            string cacheKey = component.GetType().FullName + "|" + propertyName;
+            if (!ComponentPropertyCache.TryGetValue(cacheKey, out PropertyInfo property))
+            {
+                property = component.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+                ComponentPropertyCache[cacheKey] = property;
+            }
+
+            if (property == null || !typeof(UnityEngine.Object).IsAssignableFrom(property.PropertyType))
+            {
+                return null;
+            }
+
+            return property.GetValue(component, null) as UnityEngine.Object;
+        }
+
+        private static void AddAssetPath(HashSet<string> target, UnityEngine.Object asset)
+        {
+            if (target == null || asset == null)
+            {
+                return;
+            }
+
+            string assetPath = AssetDatabase.GetAssetPath(asset);
+            if (!string.IsNullOrWhiteSpace(assetPath))
+            {
+                target.Add(assetPath);
             }
         }
 

@@ -73,7 +73,19 @@ def _compact_candidate(candidate: Any) -> dict[str, Any] | None:
         return None
 
     payload: dict[str, Any] = {}
-    for key in ("id", "name", "path", "assetType", "score", "semanticText"):
+    for key in (
+        "id",
+        "name",
+        "path",
+        "assetType",
+        "score",
+        "semanticText",
+        "metadataTokens",
+        "uiHints",
+        "assetProvenance",
+        "textureSummary",
+        "materialSummary",
+    ):
         value = candidate.get(key)
         if value not in (None, "", []):
             payload[key] = value

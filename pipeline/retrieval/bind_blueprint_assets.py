@@ -22,6 +22,7 @@ BINDING_STATE_AUTO_BIND = "auto_bind"
 BINDING_STATE_HOLD = "hold"
 BINDING_STATE_REVIEW_NEEDED = "review_needed"
 HOLD_BINDING_POLICIES = {"hold_if_uncertain", "preserve_candidates"}
+DEFAULT_IMAGE_COLOR = "#FFFFFFFF"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -92,6 +93,46 @@ def build_asset_reference(candidate: dict[str, Any], forced_kind: str | None = N
         key: value
         for key, value in reference.items()
         if value not in (None, "", 0)
+    }
+
+
+def _normalize_color(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lstrip("#").upper()
+    if len(normalized) == 6:
+        normalized += "FF"
+    if len(normalized) != 8:
+        return None
+    return normalized
+
+
+def _reset_texture_backed_image_tint(
+    node: dict[str, Any],
+    candidate: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if (node.get("kind") or "").lower() != "image" or not isinstance(candidate, dict):
+        return None
+
+    ui_hints = candidate.get("uiHints") or {}
+    if not ui_hints.get("isTextureBacked"):
+        return None
+
+    image_spec = node.get("image")
+    if not isinstance(image_spec, dict):
+        return None
+
+    original_color = image_spec.get("color")
+    normalized_color = _normalize_color(original_color)
+    if normalized_color in (None, "FFFFFFFF"):
+        return None
+
+    image_spec["color"] = DEFAULT_IMAGE_COLOR
+    return {
+        "kind": "image_color_reset",
+        "reason": "texture_backed_asset_preserves_original_pixels",
+        "from": original_color,
+        "to": DEFAULT_IMAGE_COLOR,
     }
 
 
@@ -231,6 +272,9 @@ def bind_blueprint(
             }
             if selection["shouldBind"]:
                 node["asset"] = build_asset_reference(selection["appliedCandidate"])
+                style_adjustment = _reset_texture_backed_image_tint(node, selection["appliedCandidate"])
+                if style_adjustment is not None:
+                    entry["styleAdjustments"] = [style_adjustment]
             else:
                 node["assetQuery"] = asset_query
                 if selection["bindingState"] == BINDING_STATE_REVIEW_NEEDED:

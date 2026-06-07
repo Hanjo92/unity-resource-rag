@@ -38,6 +38,17 @@ def main() -> int:
             "path": record.get("path"),
             "name": record.get("name"),
             "binding": record.get("binding", {}),
+            "uiHints": record.get("uiHints", {}),
+            "assetProvenance": record.get("assetProvenance", {}),
+            "textureSummary": record.get("textureSummary", {}),
+            "materialSummary": record.get("materialSummary", {}),
+            "prefabSummary": {
+                "rootName": ((record.get("prefabSummary") or {}).get("rootName")),
+                "componentTypes": ((record.get("prefabSummary") or {}).get("componentTypes") or [])[:8],
+                "layoutGroupTypes": ((record.get("prefabSummary") or {}).get("layoutGroupTypes") or [])[:8],
+                "referencedSpritePaths": ((record.get("prefabSummary") or {}).get("referencedSpritePaths") or [])[:5],
+            },
+            "metadataTokens": (record.get("metadataTokens") or [])[:16],
         }, ensure_ascii=False))
 
     return 0

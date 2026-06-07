@@ -18,10 +18,14 @@ namespace UnityResourceRag.Editor.ResourceIndexing
         public string name { get; set; }
         public List<string> labels { get; set; } = new List<string>();
         public List<string> folderTokens { get; set; } = new List<string>();
+        public List<string> metadataTokens { get; set; } = new List<string>();
         public string semanticText { get; set; }
         public ResourcePreviewInfo preview { get; set; }
         public ResourceGeometryInfo geometry { get; set; }
         public ResourceUiHints uiHints { get; set; } = new ResourceUiHints();
+        public ResourceAssetProvenance assetProvenance { get; set; }
+        public ResourceTextureSummary textureSummary { get; set; }
+        public ResourceMaterialSummary materialSummary { get; set; }
         public ResourcePrefabSummary prefabSummary { get; set; }
         public ResourceEmbeddingRefs embeddingRefs { get; set; } = new ResourceEmbeddingRefs();
         public ResourceBindingInfo binding { get; set; } = new ResourceBindingInfo();
@@ -68,7 +72,49 @@ namespace UnityResourceRag.Editor.ResourceIndexing
         public bool isNineSliceCandidate { get; set; }
         public bool isSingleImageRegion { get; set; }
         public bool isRepeatableBlock { get; set; }
+        public bool isTextureBacked { get; set; }
+        public bool prefersPreserveAspect { get; set; }
+        public bool hasTransparency { get; set; }
         public List<string> preferredUse { get; set; } = new List<string>();
+        public List<string> componentRoles { get; set; } = new List<string>();
+    }
+
+    [Serializable]
+    public sealed class ResourceAssetProvenance
+    {
+        public string mainAssetPath { get; set; }
+        public string mainAssetName { get; set; }
+        public string mainAssetType { get; set; }
+        public string importerType { get; set; }
+    }
+
+    [Serializable]
+    public sealed class ResourceTextureSummary
+    {
+        public string sourceTexturePath { get; set; }
+        public string sourceTextureName { get; set; }
+        public string sourceTextureAssetType { get; set; }
+        public string textureImporterType { get; set; }
+        public string spriteImportMode { get; set; }
+        public string textureFormat { get; set; }
+        public string wrapMode { get; set; }
+        public string filterMode { get; set; }
+        public bool? hasAlpha { get; set; }
+        public bool? alphaIsTransparency { get; set; }
+        public bool? sRgbTexture { get; set; }
+        public bool? mipmapEnabled { get; set; }
+        public bool? isReadable { get; set; }
+        public float? pixelsPerUnit { get; set; }
+    }
+
+    [Serializable]
+    public sealed class ResourceMaterialSummary
+    {
+        public string shaderName { get; set; }
+        public string mainTexturePath { get; set; }
+        public string mainTextureName { get; set; }
+        public bool hasMainTexture { get; set; }
+        public bool hasColorProperty { get; set; }
     }
 
     [Serializable]
@@ -76,7 +122,13 @@ namespace UnityResourceRag.Editor.ResourceIndexing
     {
         public string rootName { get; set; }
         public List<string> componentTypes { get; set; } = new List<string>();
+        public Dictionary<string, int> componentCounts { get; set; } = new Dictionary<string, int>();
         public List<string> childPaths { get; set; } = new List<string>();
+        public List<string> layoutGroupTypes { get; set; } = new List<string>();
+        public List<string> referencedSpritePaths { get; set; } = new List<string>();
+        public List<string> referencedTexturePaths { get; set; } = new List<string>();
+        public List<string> referencedFontPaths { get; set; } = new List<string>();
+        public List<string> referencedMaterialPaths { get; set; } = new List<string>();
     }
 
     [Serializable]
